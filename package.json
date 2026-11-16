@@ -13,7 +13,11 @@
     "reference:warmup": "iwsdk reference warmup",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:rules": "node scripts/sim-rules.ts",
+    "test:dice": "esbuild scripts/sim-dice.ts --bundle --platform=node --format=esm --alias:@iwsdk/core=three --log-level=warning --outfile=.tmp/sim-dice.mjs && node .tmp/sim-dice.mjs",
+    "test": "npm run test:rules && npm run test:dice",
+    "test:xr": "python3 scripts/e2e/run_all.py"
   },
   "dependencies": {
     "@iwsdk/core": "1.1.0",

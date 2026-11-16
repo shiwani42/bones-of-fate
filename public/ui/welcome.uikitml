@@ -47,6 +47,17 @@
     color: #dddfe3;
   }
 
+  .credits {
+    color: #6a6b70;
+    font-size: 13px;
+    line-height: 18px;
+    margin-top: 8px;
+  }
+
+  .credits:dark {
+    color: #a9abb2;
+  }
+
   .button {
     justify-content: flex-start;
     margin-left: 22px;
@@ -60,16 +71,17 @@
 </style>
 <Panel class="panel-root">
   <div class="panel-content">
-    <div class="eyebrow">IMMERSIVE WEB SDK</div>
-    <div class="heading">Hello, Immersive Web!</div>
-    <div class="body">Try each station around you,</div>
-    <div class="body">then make this scene your own.</div>
+    <div class="eyebrow">MIXED REALITY  |  HANDS ONLY</div>
+    <div class="heading">Chausar: The Game of Dice</div>
+    <div class="body">Sit at a table. Throw the pasa against Shakuni.</div>
+    <div class="body">Cheat when he looks away. Catch him when he does.</div>
+    <div class="credits">Hands only, seated: put the board on a real table. All art and sound are procedural. Fonts: Rozha One, Tiro Devanagari Hindi (SIL OFL). Story lines adapted from K. M. Ganguli's public-domain Mahabharata.</div>
   </div>
   <Button id="xr-button" class="button">
     <ButtonIcon>
       <RectangleGoggles></RectangleGoggles>
     </ButtonIcon>
-    <ButtonLabel class="button-label">Enter XR</ButtonLabel>
+    <ButtonLabel class="button-label">Enter the Court (AR)</ButtonLabel>
   </Button>
   <Button id="exit-button" class="button" style="display: none">
     <ButtonIcon>

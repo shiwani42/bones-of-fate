@@ -46,3 +46,7 @@ pids/
 
 # Regenerated per machine by `npm run setup` (absolute paths)
 opencode.json
+
+# Raw asset-generation intermediates (reproducible via tools/; only optimised outputs ship)
+tools/polyhaven/raw/
+tools/freegen/out/*.glb

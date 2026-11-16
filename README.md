@@ -1,45 +1,121 @@
-# Mahabharat Chausar
+# Chausar: The Game of Dice
 
-A carved chausar board rises out of your real table. Play the dice game from the Mahabharata against an AI Shakuni. **Cheating is a mechanic**: load the dice with a secret hand gesture, but the opponent watches your hands and can call "Cheat!".
+**Mixed reality · hands only · seated · Meta Quest Browser (WebXR)**
 
-- **Track:** Gaming. **Awards:** Boldest Original Concept (cheating by gesture only works with tracked hands), Best Agentic Interaction (AI Shakuni), Social & Multiplayer if 1v1 PvP ships.
-- **Awe moment:** a caught cheater's side of the board cracks open, and divine light pours out to reveal the true roll.
-- **Core loop:** throw the pasa dice with a real throw → move pieces by pinch → optionally load the dice (costs karma) → Shakuni may accuse → punishment, or progress toward a short Kurukshetra finale.
+A carved chausar board rises out of your real table. Across it sits the spirit of **Shakuni**, the most famous dice cheat of the Mahabharata. You throw the long *pasa* dice with a real throw of your hand and move your pieces with a pinch.
 
-## Minimum playable version
-1v1 against a heuristic AI on one board, with 2–3 distinct cheat gestures and the board-crack finale.
+**Cheating is the game.** While Shakuni looks away, lower the dice beneath your real table's edge to swap in loaded ones, or poke a settled die to tip it onto a better face. If his blazing eyes catch you, your side of the board cracks open and divine light reveals the true roll. He cheats too: watch his ghostly hand. If it dips below the table, strike the gong to accuse him.
 
-## Reuse
-- **IWSDK Havok physics:** set `world.features.physics: true` in `iwsdk.config.json`. Grabbed bodies keep their velocity when thrown, and `PhysicsManipulation` sets velocity directly.
-- byWulf/threejs-dice (MIT) for the pre-simulated forced-outcome trick.
-- Gesture detection from the 2025 winner Dun Jun (`sma1692/DunJun`, check its license) and handy-work (MIT).
-- Kenney board-game kit (CC0) with toon materials; three.quarks (MIT) for VFX.
-- Pre-fractured glTF (Blender Cell Fracture) for the crack.
+- **Track:** Gaming
+- **Special awards it targets:** Boldest Original Concept (cheating by hand only works with tracked hands and a real table), Best Reason to Come Back (the stakes climb between sessions), Best First Five Minutes.
+- **Tech:** IWSDK 1.1.0 (three.js + ECS), WebXR `immersive-ar` with hand tracking, plane detection and depth occlusion; a realistic rigged character driven by procedural animation; static hosting on Vercel.
 
-## Build steps
-1. Board snaps to the table.
-2. Long dice as box shapes; read the face pointing up.
-3. Snap-to-square pieces with oversized colliders.
-4. Cheat gestures with hysteresis and hold time.
-5. Heuristic Shakuni that watches for hand-motion anomalies; optional LLM taunts through a `/api` proxy.
-6. Finale.
+---
 
-## Risks
-- Fast throws leave the tracking volume: use a 120 ms ring-buffer velocity and the last good pose.
-- Story material must be public-domain only; use respectful original art.
-- Hindi text needs the Canvas2D path (uikit doesn't support Indic shaping).
+## How to play (about 3 minutes)
 
-## Common to every project
-- Stack: IWSDK 1.1.0 (pinned) · WebXR in Meta Quest Browser · mixed-reality `ar` session · hands only · seated · Vercel.
-- Shared rules, visual/hands/MR playbooks, perf budget, assets & licenses, and the submission gate: **[common build plan](../meta-vr-start-2026-kit/research/common-build-plan.md)**.
-- Competition: Meta VR Start Developer Competition 2026. Deadline **Wed 18 Nov 2026, 12:00 PM PST (Thu 19 Nov, 1:30 AM IST)**.
+| Do this | With your hands |
+|---|---|
+| Place the board | Look at your table; a gold cross outline snaps onto it. **Pinch** to set it. With no table detected, hold a hand just above your table and pinch. |
+| Throw | **Pinch** the three pasa, shake, then **open your fingers** to throw. |
+| Move | If both pieces can move, **pinch** (or poke) the glowing piece. |
+| Cheat 1: the swap | While holding the dice, lower your hand **below the table edge** for half a second. The pasa come back loaded (best possible throw). |
+| Cheat 2: the nudge | After the throw, **poke** a die to tip it a quarter turn onto the next face. |
+| Accuse Shakuni | **Poke the gong** (near-left corner) after his throw. If he cheated, his side cracks and his turn is undone; if he didn't, you lose your next throw. |
+| Move the board | **Pinch with both hands** for 1.5 s. |
+| Play again | Strike the gong after the match. |
 
-## Run
+**Rules ("short chausar"):**
+- 3 pasa with faces 1, 2, 5 and 6; each throw moves one piece by the total.
+- 2 pieces each, which run one anticlockwise lap of the cross, then up your own middle column into the *char koni* (centre).
+- **First piece home wins.**
+- Landing on an enemy piece outside a castle square sends it back to start.
+- A capture or a triple earns another throw.
+
+**Shakuni's gaze is the stealth loop:**
+- Red, blazing eyes mean he's watching.
+- When he turns to the court, his eyes dim to embers.
+- A flicker and a warning tone mean he's turning back.
+- Getting seen means you're caught.
+- Cheating unseen still raises his **suspicion** meter (under his chin). At high suspicion he can call it on luck alone.
+- His second throw always cheats, so every player learns his tell early.
+
+**Progress (saved in the browser):** each win raises the stake one step, following the Sabha Parva: a chest of gold → the royal chariot → a thousand elephants → the army → the treasury → the kingdom. The ledger shows wins, losses and how often you've caught him.
+
+---
+
+## Run it
+
 ```bash
-npm ci            # Node >=20.19 (see .nvmrc). .npmrc skips onnxruntime's CUDA download.
-npm run setup     # once per machine: MCP configs for Claude/Cursor/Codex + IWSDK reference index
-npm run dev       # HTTPS dev server + emulator on https://localhost:8081
+npm ci                 # Node ≥ 20.19 (see .nvmrc)
+npm run setup          # once per machine: MCP configs + IWSDK reference index
+npm run dev            # HTTPS dev server + emulator on https://localhost:8082
 npm run typecheck && npm run build
 ```
-Testing on a Quest from Linux: `adb reverse tcp:8081 tcp:8081`, then open `https://localhost:8081` in Quest Browser.
-Agent workflow: start every task with the `iwsdk-dev` skill. More in [docs/IWSDK-STARTER.md](docs/IWSDK-STARTER.md) and [AGENTS.md](AGENTS.md).
+
+- **Port 8082** (not the scaffold's 8081), so Chausar can run alongside the other projects' dev servers.
+- **Quest over USB from Linux:** `adb reverse tcp:8082 tcp:8082`, then open `https://localhost:8082` in Quest Browser.
+- **Desktop keys** (browser preview and emulator):
+  - `Space` throw, `U` load the dice, `F` flip a die, `1`/`2` pick a piece, `G` gong, `N` new game, `M` mute.
+  - Dev builds only: `K` makes Shakuni look away, `W`/`L` put a piece near home, `X` crack, `V` victory.
+
+## Tests
+
+```bash
+npm test               # rules + dice physics, headless (no browser)
+npx @iwsdk/cli dev up --ai-mode agent && npm run test:xr   # 19 XR checks with emulated hands
+```
+
+| Suite | What it proves |
+|---|---|
+| `scripts/sim-rules.ts` | The path is 75 squares with legal (incl. diagonal) steps. 2,000 AI-vs-AI games average about 17 throws, with balanced wins. Regression: a seat-0 win keeps the turn. |
+| `scripts/sim-dice.ts` | 300 hand throws: all settle (median 1.1 s), **forced faces are honoured 150/150** (loaded dice), and about 97% land fully in the throwing court. |
+| `scripts/e2e/xr_core.py` | Hands-only in IWER (`immersive-ar`, Quest 3 profile): table detection → pinch to place → pinch to skip the intro → pinch-pickup → throw → reveal → seen swap is caught → poking the gong catches Shakuni's scripted cheat → play resumes. |
+| `scripts/e2e/xr_cheats.py` | Unseen swap gets away; wrong accusation forfeits your throw; flip-poke registers; reaching the centre wins; striking the gong restarts. |
+
+`test:xr` calls `python3`. On Windows run `python scripts/e2e/run_all.py`.
+
+## How it's built
+
+```
+src/game/
+  rules.ts     pure rules: paths, moves, captures, AI scoring, loaded throws (no three.js)
+  dice.ts      custom rigid-body pasa sim in board space; settle step rolls each bar onto a chosen face
+  hands.ts     WebXR joints → pinch hysteresis, release velocity (least squares, 140–40 ms window), tracking-loss grace
+  board.ts     procedural cross board: embroidered cloth with glinting zari (metal/rough/bump masks), lacquered pieces, gong, tassels
+  shakuni.ts   Shakuni controller: gaze state machine, hand path, suspicion; drives the realistic human (fallback: procedural bust)
+  human.ts     realistic Shakuni runtime: seated cross-legged (leg IK), two-bone arm IK, head look, blinks, expressions, jaw talk, beard stroke
+  seat.ts      his gaddi (velvet divan + bolster), sized to your real table's height
+  palace.ts    the dice hall of Hastinapur: 360° dome that replaces your walls, fades out below the horizon (your table stays real)
+  ui.ts        text system: dialogue subtitles in their own region, instruction hints anchored to objects, paged ≤2 lines
+  text.ts      Canvas2D labels (Devanagari-safe), fit-to-card (never clips), Mukta UI + Rozha One display
+  lighting.ts  one shadow-casting key light aimed at the board, re-rendered only when something moves
+  ambience.ts  two brass diyas (flicker, warm light, embers, smoke), moods; room dimmer
+  juice.ts     pooled particle bursts, landing rings, reward waves, squash-and-stretch hops
+  fx.ts        crack → kintsugi gold, light pillars, sparks, marigold petals
+  audio.ts     all sound synthesised in WebAudio (clacks, rattle, gong, crack, choir, conch, tanpura drone)
+  save.ts      localStorage ledger + stake ladder
+  director.ts  the IWSDK system: placement → intro → turns → cheats → accusation → game over
+tools/
+  shakuni/     build_shakuni.py + costume.py: headless Blender + MPFB → public/models/shakuni.glb
+  freegen/     gen.py (FLUX → TRELLIS props, needs a free HF token), palace.py (FLUX panorama)
+  meshy/       optional paid route (unused)
+```
+
+**Key decisions**
+- **A real person across the table.** Shakuni is a MakeHuman/MPFB human (CC0 output) with a costume built in code (turban wound from one zari-bordered band, angarkha + dhoti cut from his own body mesh, hair-card goatee and twirled moustache, pearls, sarpech). He's driven procedurally: breathing, blinking, expressions (smirk, squint, laugh, sneer), head/eye contact, jaw while speaking, real arms that reach for, shake, hide and throw the dice, and a beard stroke between turns. He sits cross-legged on a gaddi whose height follows your table, and **Quest depth occlusion** lets your real table hide whatever of him is behind it.
+- **No Havok for the dice** — custom sim so the game can force a face invisibly (loaded dice); honest throws keep their natural face.
+- **Your real table is part of the mechanic** (hide the dice below its edge), so passthrough is purposeful; the **room transforms** into the Hastinapur hall around it.
+- **Text follows Meta's comfort rules** (`hz-immersive-designer`): ≥1.5° glyphs, sans-serif body (Mukta), ≥4.5:1 contrast, ≤2 lines per page; dialogue and instructions live in separate regions so nothing overlaps.
+- **Placement fallback chain**: labelled table in front of you → hand placement → virtual spot; two-hand pinch re-places.
+- **Performance**: ~85–90 draw calls in desktop view, one 1024² shadow map updated only on motion, no post-processing, foveation 0.5, 72 Hz target. Character 2.8 MB (WebP textures; no Draco — it corrupted small skinned meshes).
+
+## Credits
+- **Shakuni's body**: generated with MakeHuman/MPFB 2 (the tool is GPL; generated humans and the MakeHuman system assets — skin, eyes, brows, lashes — are CC0). Costume, hair and animation are our own code.
+- **Palace backdrop**: painted with FLUX.1-schnell (Apache-2.0) from our prompt (`tools/freegen/palace.py`).
+- **Brass goblets**: Poly Haven, CC0.
+- **Fonts**: Rozha One, Tiro Devanagari Hindi, Mukta — SIL Open Font License (Google Fonts).
+- **Story**: inspired by the Sabha Parva; "Lo, I have won!" and the order of stakes from K. M. Ganguli's public-domain translation.
+- **Code**: IWSDK (MIT, Meta). Particle-burst and reward-wave ideas adapted from Meta ProjectFlowerbed (MIT), attributed in `juice.ts`. Everything else written for this project.
+
+Research notes: [docs/RESEARCH.md](docs/RESEARCH.md). Submission kit: [docs/SUBMISSION.md](docs/SUBMISSION.md). Test and judging matrix: [docs/TESTING.md](docs/TESTING.md).
