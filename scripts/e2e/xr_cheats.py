@@ -13,7 +13,9 @@ def just_throw(c):
     hand([{'position': {'x': c[0] + 0.03, 'y': TABLE + 0.14, 'z': c[2] - 0.05}, 'anchor': 'grasp', 'duration': 0.16}, {'pinch': 0, 'duration': 0.06}])
 
 # 1. unseen swap: Shakuni forced to look away first
-pick(D[1]); key('k'); under_and_throw(D[1])
+pick(D[1]); key('k')
+check('ghost hand demonstrates the swap while he looks away', bool(wait_for(r' ghost swap$', 5)))
+under_and_throw(D[1])
 m = wait_for(r'resolve acts', 25)
 check('swap while Shakuni looks away is unseen', '"seen":false' in m and 'loaded=true' in m, m[m.index('acts'):])
 check('unseen swap at low suspicion is not caught', 'caught=false' in m)
@@ -39,6 +41,8 @@ m = [x for x in logs() if ' p_ready turn' in x][-1]; D = dice_world(m)
 # 3. flip cheat: throw honestly, then poke a die while he looks away
 pick(D[1]); just_throw(D[1])
 m = wait_for(r' p_reveal turn', 12)
+key('k')
+check('ghost hand demonstrates the flip while he looks away', bool(wait_for(r' ghost flip$', 5)))
 dw = dice_world(m)
 d0 = dw[0]
 hand([{'position': {'x': d0[0], 'y': d0[1] + 0.03, 'z': d0[2]}, 'anchor': 'index-tip', 'duration': 0.35, 'poseId': 'point'},

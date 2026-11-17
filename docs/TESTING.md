@@ -63,13 +63,14 @@ Sources: Chess Club (Odders Lab), Hand Physics Lab (Holonautic) and Table Troope
 - **Feedback:** the dice brighten and tick when your hand is in grabbing range. Controllers buzz on grab, throw, flip, choose, take-back and gong.
 - **Wave at Shakuni** (open hand, near head height) and he answers, at most every 25 s.
 - **Instructions follow your input** (Meta's "Hands Onboarding 101"): controller players see "pull the trigger", not "pinch".
+- **A ghost hand shows each cheat** where it happens, only while Shakuni looks away: holding the dice, a blue spirit hand beside yours dips below the table edge and back; in the reveal, a ghost finger pokes the die nearest you. It shows twice per match per cheat, stops once you've done that cheat, and returns with the reminder. The reveal window stays open 6 s while it shows. Dev key `8` pins either demo for review (`src/game/ghost/ghost-hand.ts`).
 - **Help comes back:** if you haven't picked up the dice after 12 s, the full instruction returns; every third turn, the hint for a trick you haven't tried yet (swap, flip, gong) can play again.
 - **Skipped:** daily puzzles and live-ops (Chess Club's retention), voice commands, and red-tinted virtual hands (passthrough shows your real hands; the waiting dice glow instead).
 
 **The article's other links, and what came of them:**
 | Link | Used? |
 |---|---|
-| Hands Onboarding 101 (linked from the Operator blog) | Yes: input-aware instructions, reminders, recovery after tracking loss. A looping 3D demo hand for the cheats is not built yet. |
+| Hands Onboarding 101 (linked from the Operator blog) | Yes: input-aware instructions, reminders, recovery after tracking loss, and a looping ghost hand that demonstrates each cheat. |
 | Hand tracking overview | Confirms "hands complement controllers": both stay supported. Its wide-motion mode is Unity-only. |
 | Mixed reality overview | Already covered: plane detection, depth occlusion, passthrough grounding. |
 | Interaction SDK (Unity/Unreal), Building Blocks | Engine-only; IWSDK is our WebXR equivalent. Their ideas (hover state, grab affordance) are now in. |
@@ -93,6 +94,7 @@ Sources: Chess Club (Odders Lab), Hand Physics Lab (Holonautic) and Table Troope
 | H8 | Depth occlusion: the real table hides Shakuni's lower body and gaddi (needs Quest 3/3S depth) | Look across the table from a low seat. |
 | H9 | Palace dome: the horizon sits at eye level; the fade line below the walls doesn't cut into the real table | Sit at two different table heights. |
 | H10 | Choosing and take-back feel deliberate, not sticky: 0.3 s dwell, 2.4 s window | Play 5 turns where you have two options; also hand the headset to someone new and watch, without explaining. |
+| H11 | The ghost hand is readable but doesn't startle; does a newcomer copy it? | Watch a first-time player when Shakuni first looks away, without explaining. |
 | H6 | `speechSynthesis` voice present in Quest Browser (optional: captions always show) | Listen during the intro. |
 | H7 | Production URL works logged out, in incognito | Open the Vercel URL on the headset. |
 

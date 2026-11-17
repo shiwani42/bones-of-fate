@@ -114,6 +114,7 @@ tools/
 - **Shakuni's body**: generated with MakeHuman/MPFB 2 (the tool is GPL; generated humans and the MakeHuman system assets — skin, eyes, brows, lashes — are CC0). Costume, hair and animation are our own code.
 - **Palace backdrop**: painted with FLUX.1-schnell (Apache-2.0) from our prompt (`tools/freegen/palace.py`).
 - **Brass goblets**: Poly Haven, CC0.
+- **Ghost hand** (shows the cheats): [WebXR Input Profiles](https://github.com/immersive-web/webxr-input-profiles) generic hand mesh, MIT; pinch and point hand shapes from IWER (MIT, Meta).
 - **Fonts**: Rozha One, Tiro Devanagari Hindi, Mukta — SIL Open Font License (Google Fonts).
 - **Story**: inspired by the Sabha Parva; "Lo, I have won!" and the order of stakes from K. M. Ganguli's public-domain translation.
 - **Code**: IWSDK (MIT, Meta). Particle-burst and reward-wave ideas adapted from Meta ProjectFlowerbed (MIT), attributed in `juice.ts`. Everything else written for this project.

@@ -49,6 +49,7 @@ import { Hint, Subtitles } from './ui.js';
 import { Palace } from './palace.js';
 import { TableDressing } from './tablecloth.js';
 import { SetDressing } from './props.js';
+import { GhostDemo, type GhostDemoKind } from './ghost/ghost-hand.js';
 
 /**
  * The game director: one IWSDK system that owns the match.
@@ -258,6 +259,11 @@ export class ChausarSystem extends createSystem({
   private readonly invM = new Matrix4();
   private readonly headLocal = new Vector3();
   private readonly headWorld = new Vector3();
+  private ghost!: GhostDemo;
+  /** demos left this match per cheat (refilled by the every-third-turn reminder) */
+  private readonly ghostLeft: Record<GhostDemoKind, number> = { swap: 2, flip: 2 };
+  private ghostShown: GhostDemoKind | null = null;
+  private ghostPreview: 0 | 1 | 2 = 0;
   /** cheats and the gong the player has used this match (unused ones get their hint again) */
   private readonly used = new Set<'swap' | 'flip' | 'gong'>();
 
@@ -309,6 +315,12 @@ export class ChausarSystem extends createSystem({
     };
     this.fx = new Fx();
     this.anchor.add(this.fx.group);
+    // the ghost hand that shows each cheat the first times it becomes possible
+    this.ghost = new GhostDemo();
+    this.anchor.add(this.ghost.root);
+    void this.ghost.load(import.meta.env.BASE_URL).then((ok) => {
+      if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} ghost hand ${ok ? 'loaded' : 'FAILED'}`);
+    });
     // Production lighting + ambience + juice (see docs/INTEGRATION-VISUALS.md)
     this.shadows = new ShadowRig(this.world);
     this.shadows.watch(
@@ -489,6 +501,7 @@ export class ChausarSystem extends createSystem({
   private resetMatch(): void {
     this.state = newGame();
     this.used.clear();
+    this.ghostLeft.swap = this.ghostLeft.flip = 2;
     this.skipNextThrow = false;
     this.sTurnCount = 0;
     this.shakuni.suspicion = 20;
@@ -596,6 +609,7 @@ export class ChausarSystem extends createSystem({
 
     this.updateGong(dt);
     this.updateWave(dt);
+    this.updateGhost(dt, time);
     this.updateHop(dt);
     this.updatePieces(dt);
     this.dice.update(dt);
@@ -692,6 +706,8 @@ export class ChausarSystem extends createSystem({
       if (this.keys.has('v')) this.finish(0);
       // review cameras: c cycles face close-up / seated body / side profile / set / off
       if (this.keys.has('c')) this.devCam = (this.devCam + 1) % 5;
+      // 8 = pin the ghost-hand demo for review: swap → flip → off
+      if (this.keys.has('8')) this.ghostPreview = ((this.ghostPreview + 1) % 3) as 0 | 1 | 2;
       if (this.keys.has('b')) this.shakuni.strokeBeard();
       if (this.keys.has('h')) this.shakuni.laughT = 2;
       if (this.keys.has('j')) this.shakuni.angerT = 2;
@@ -908,8 +924,8 @@ export class ChausarSystem extends createSystem({
       this.pickHintText = this.playerTurns <= 1 ? this.line('pick') : 'Your throw';
       // contextual reminders: every third turn, re-offer the hint for a trick not yet tried
       if (this.playerTurns > 1 && this.playerTurns % 3 === 1) {
-        if (!this.used.has('swap')) this.shown.delete('hintSwap');
-        if (!this.used.has('flip')) this.shown.delete('hintFlip');
+        if (!this.used.has('swap')) { this.shown.delete('hintSwap'); this.ghostLeft.swap = Math.max(this.ghostLeft.swap, 1); }
+        if (!this.used.has('flip')) { this.shown.delete('hintFlip'); this.ghostLeft.flip = Math.max(this.ghostLeft.flip, 1); }
         if (!this.used.has('gong')) this.shown.delete('hintGong');
       }
     } else {
@@ -1198,7 +1214,8 @@ export class ChausarSystem extends createSystem({
       const tip = this.toLocal(h.indexTip, this.tA);
       for (const d of this.dice.dice) if (d.pos.distanceTo(tip) < 0.1) reaching = true;
     }
-    const limit = reaching ? 6 : 3;
+    // time to watch the ghost demonstrate the flip, and to try it
+    const limit = reaching || this.ghostShown === 'flip' ? 6 : 3;
     if (this.phaseT > limit && this.dice.allRest) this.resolvePlayerThrow();
   }
 
@@ -1699,6 +1716,53 @@ export class ChausarSystem extends createSystem({
     }
     if (!open) return;
     this.accuse();
+  }
+
+  /**
+   * The ghost hand (Meta's "Hands Onboarding 101": demonstrate an unfamiliar
+   * gesture where it's used, loop it, stop once the player has done it).
+   * Only while Shakuni looks away, so following it never gets you caught.
+   */
+  private updateGhost(dt: number, time: number): void {
+    let want: GhostDemoKind | null = null;
+    const away = !this.shakuni.watching;
+    const right = this.hands.right.tracked || !this.hands.left.tracked;
+    if (this.phase === 'p_holding' && this.holder && this.holdLost < 0 && !this.loaded && !this.used.has('swap') && away) {
+      // beside your own hand, a little to the outside, then back toward you and under the edge
+      const sign = this.holder.side === 'right' ? 1 : -1;
+      if (this.ghostShown === 'swap' || this.ghostLeft.swap > 0) {
+        want = 'swap';
+        this.ghost.from.copy(this.holdAnchor);
+        this.ghost.from.x += 0.075 * sign;
+        this.ghost.to.set(this.ghost.from.x, -0.11, Math.max(this.ghost.from.z + 0.1, this.headLocal.z - 0.3));
+      }
+    } else if (this.phase === 'p_reveal' && !this.loaded && !this.used.has('flip') && away && this.dice.allRest) {
+      if (this.ghostShown === 'flip' || this.ghostLeft.flip > 0) {
+        want = 'flip';
+        // the die nearest you
+        let best = this.dice.dice[0];
+        for (const d of this.dice.dice) if (d.pos.z > best.pos.z) best = d;
+        this.ghost.target.copy(best.pos);
+      }
+    }
+    if (import.meta.env.DEV && this.ghostPreview) {
+      want = this.ghostPreview === 1 ? 'swap' : 'flip';
+      this.ghost.from.copy(PLAYER_DICE_SPOT).add(this.tA.set(0.075, 0.16, 0.08));
+      this.ghost.to.set(this.ghost.from.x, -0.11, Math.max(this.ghost.from.z + 0.1, this.headLocal.z - 0.3));
+      this.ghost.target.copy(this.dice.dice[1].pos);
+      this.ghostShown = want;
+    }
+    if (want && this.ghostShown !== want) {
+      this.ghostLeft[want]--;
+      if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} ghost ${want}`);
+    }
+    this.ghostShown = want;
+    this.ghost.play(want, want === 'swap' && this.holder ? this.holder.side : right ? 'right' : 'left');
+    this.anchor.updateWorldMatrix(true, false);
+    this.ghost.update(dt, time, this.anchor.matrixWorld);
+    if (import.meta.env.DEV && want && this.ghost.showing && this.once(`ghostpos-${want}`)) {
+      console.info(`[chausar] #${this.logTag()} ghost at wrist=${JSON.stringify(this.ghost.wristWorld())} visible=${this.ghost.root.visible}`);
+    }
   }
 
   /**
