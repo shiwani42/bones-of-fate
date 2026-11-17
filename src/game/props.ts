@@ -1,4 +1,5 @@
 import { AssetManager, Box3, Group, Mesh, MeshStandardMaterial, Object3D, Vector3 } from '@iwsdk/core';
+import { bakeContactShadow } from './contact.js';
 
 /**
  * Optional 3D set dressing (public/models/props/*.glb). Each prop is loaded if present;
@@ -23,19 +24,30 @@ export interface PropSpec {
   frontYaw?: number;
   /** emissive warmth for lamps */
   glow?: string;
+  /**
+   * Surface response. Image→3D GLBs ship base colour only, and glTF's defaults
+   * (metallic 1, rough 1) turn stone into dull metal, so every prop states its own.
+   */
+  surface?: { metalness: number; roughness: number; env?: number };
+  /** baked floor contact shadow (default on for floor props) */
+  contact?: false | { reach?: number; opacity?: number; pad?: number };
 }
+
+const STONE = { metalness: 0, roughness: 0.82, env: 0.6 };
+const MARBLE = { metalness: 0, roughness: 0.38, env: 0.9 };
+const BRASS = { metalness: 0.9, roughness: 0.32, env: 1.2 };
 
 export const SET_DRESSING: PropSpec[] = [
   // a great arch frames Shakuni from behind
-  { file: 'arch.glb', height: 2.7, at: [0, -1.75] },
+  { file: 'arch.glb', height: 2.7, at: [0, -1.75], surface: MARBLE, contact: { reach: 0.35, opacity: 0.65 } },
   // carved pillars either side of him, well clear of the table
-  { file: 'pillar.glb', height: 2.75, at: [-1.45, -1.4] },
-  { file: 'pillar.glb', height: 2.75, at: [1.45, -1.4] },
+  { file: 'pillar.glb', height: 2.75, at: [-1.45, -1.4], surface: STONE, contact: { reach: 0.4 } },
+  { file: 'pillar.glb', height: 2.75, at: [1.45, -1.4], surface: STONE, contact: { reach: 0.4 } },
   // tall brass lamps flanking his gaddi
-  { file: 'standing_lamp.glb', height: 1.15, at: [-0.72, -0.85], glow: '#ff9a3a' },
-  { file: 'standing_lamp.glb', height: 1.15, at: [0.72, -0.85], glow: '#ff9a3a' },
+  { file: 'standing_lamp.glb', height: 1.15, at: [-0.72, -0.85], glow: '#ff9a3a', surface: BRASS, contact: { reach: 0.25, opacity: 0.62 } },
+  { file: 'standing_lamp.glb', height: 1.15, at: [0.72, -0.85], glow: '#ff9a3a', surface: BRASS, contact: { reach: 0.25, opacity: 0.62 } },
   // a hanging lamp off to his right, above head height (never over his face)
-  { file: 'hanging_lamp.glb', height: 0.45, at: [-0.62, -0.55], lift: 1.25, glow: '#ffb24a' },
+  { file: 'hanging_lamp.glb', height: 0.45, at: [-0.62, -0.55], lift: 1.25, glow: '#ffb24a', surface: BRASS, contact: false },
 ];
 
 const box = new Box3();
@@ -83,14 +95,26 @@ export class SetDressing {
   private async add(spec: PropSpec): Promise<void> {
     const obj = await loadNormalised(`${this.base}models/props/${spec.file}`, spec.height, spec.frontYaw ?? 0);
     if (!obj) return;
-    if (spec.glow) {
-      obj.traverse((o) => {
-        const m = (o as Mesh).material as MeshStandardMaterial | undefined;
-        if (m && 'emissive' in m) {
-          m.emissive.set(spec.glow!);
-          m.emissiveIntensity = 0.12;
-        }
-      });
+    obj.traverse((o) => {
+      const mesh = o as Mesh;
+      if (!mesh.isMesh) return;
+      // the loader caches by URL and clone(true) shares materials: give each placement its own
+      const m = (mesh.material as MeshStandardMaterial).clone();
+      mesh.material = m;
+      if (!('emissive' in m)) return;
+      if (spec.surface) {
+        m.metalness = spec.surface.metalness;
+        m.roughness = spec.surface.roughness;
+        m.envMapIntensity = spec.surface.env ?? 1;
+      }
+      if (spec.glow) {
+        m.emissive.set(spec.glow);
+        m.emissiveIntensity = 0.12;
+      }
+    });
+    if (spec.contact !== false && !spec.lift) {
+      const shadow = bakeContactShadow(obj, spec.contact || {});
+      if (shadow) obj.add(shadow);
     }
     obj.rotation.y = spec.yaw ?? 0;
     this.items.push({ spec, obj });

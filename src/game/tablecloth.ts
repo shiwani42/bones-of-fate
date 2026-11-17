@@ -97,6 +97,35 @@ function topTexture(): CanvasTexture {
   return t;
 }
 
+/**
+ * Metal/rough map from a cloth texture: the gold zari threads become metal (B) and
+ * glossier (G) so they glint with the palace reflections, the velvet stays matte.
+ */
+function zariMetalRough(colour: CanvasTexture): CanvasTexture {
+  const src = colour.image as HTMLCanvasElement;
+  const c = document.createElement('canvas');
+  c.width = src.width;
+  c.height = src.height;
+  const g = c.getContext('2d')!;
+  const img = src.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+  const px = img.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i], gr = px[i + 1];
+    // gold (#d4a24a) is bright red + mid green; crimson velvet has almost no green
+    const gold = Math.min(1, Math.max(0, (gr - 60) / 70)) * Math.min(1, Math.max(0, (r - 120) / 60));
+    px[i] = 0;
+    px[i + 1] = Math.round(255 * (1 - 0.55 * gold)); // roughness: 0.9 → 0.4
+    px[i + 2] = Math.round(255 * 0.3 * gold); // a touch of metal: full metal mirrors the dark ceiling
+    px[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new CanvasTexture(c);
+  t.wrapS = colour.wrapS;
+  t.wrapT = colour.wrapT;
+  t.anisotropy = colour.anisotropy;
+  return t;
+}
+
 function skirtTexture(): CanvasTexture {
   const W = 512;
   const H = 256;
@@ -142,8 +171,12 @@ export class TableDressing {
   constructor() {
     this.group.name = 'table-dressing';
     // deep crimson velvet: darkened base + a muted sheen (a bright sheen read as salmon under warm light)
-    this.velvet = new MeshPhysicalMaterial({ map: topTexture(), color: 0x8a5a5a, roughness: 0.9, sheen: 0.6, sheenRoughness: 0.6, sheenColor: 0x7a2030 });
-    this.skirtMat = new MeshPhysicalMaterial({ map: skirtTexture(), color: 0x8a5a5a, roughness: 0.9, sheen: 0.6, sheenRoughness: 0.6, sheenColor: 0x7a2030, side: DoubleSide });
+    const topTex = topTexture();
+    const skirtTex = skirtTexture();
+    const topMR = zariMetalRough(topTex);
+    const skirtMR = zariMetalRough(skirtTex);
+    this.velvet = new MeshPhysicalMaterial({ map: topTex, color: 0x8a5a5a, roughness: 0.9, roughnessMap: topMR, metalness: 1, metalnessMap: topMR, sheen: 0.6, sheenRoughness: 0.6, sheenColor: 0x7a2030 });
+    this.skirtMat = new MeshPhysicalMaterial({ map: skirtTex, color: 0x8a5a5a, roughness: 0.9, roughnessMap: skirtMR, metalness: 1, metalnessMap: skirtMR, sheen: 0.6, sheenRoughness: 0.6, sheenColor: 0x7a2030, side: DoubleSide });
     this.top = new Mesh(new BufferGeometry(), this.velvet);
     this.skirt = new Mesh(new BufferGeometry(), this.skirtMat);
     this.fringe = new InstancedMesh(new ConeGeometry(0.006, 0.05, 8), this.gold, 260);

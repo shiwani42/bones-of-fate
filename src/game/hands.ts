@@ -7,8 +7,11 @@ import { Matrix4, Quaternion, Vector3 } from '@iwsdk/core';
  *  - pinch point, index fingertip, palm position/orientation in world space,
  *  - release velocity from a ~120 ms ring buffer with a least-squares fit
  *    (one noisy frame can't ruin a throw),
- *  - tracking-loss grace: hold the last good pose ~150 ms; if tracking drops
- *    mid-throw the dice are released with the last good velocity.
+ *  - tracking-loss grace: hold the last good pose ~150 ms, then report
+ *    `justLost` once. What a loss *means* (a blurred fast throw, or a hand that
+ *    slipped out of view) is the game's call, not this layer's.
+ *  - `buzz()`: controller haptics (hands have none, so callers pair it with
+ *    sound and glow).
  * Controllers fall back to grip pose + select (trigger) as "pinch".
  */
 
@@ -41,6 +44,11 @@ export class HandState {
   readonly velocity = new Vector3();
   /** Seconds the hand has been continuously tracked. */
   trackedFor = 0;
+  /** True for the one frame where tracking is declared lost (after the grace). */
+  justLost = false;
+  /** Pinch-point speed (m/s) at the moment tracking was lost. */
+  lostSpeed = 0;
+  private src: XRInputSource | undefined;
 
   private lastSeen = -1e9;
   private buf: Sample[] = [];
@@ -74,6 +82,8 @@ export class HandState {
   ): void {
     this.pinchStarted = false;
     this.pinchEnded = false;
+    this.justLost = false;
+    this.src = src;
     let ok = false;
 
     if (frame && ref && src) {
@@ -140,7 +150,21 @@ export class HandState {
       // Tracking really lost: release whatever we hold with the last velocity.
       this.tracked = false;
       this.trackedFor = 0;
+      this.justLost = true;
+      this.lostSpeed = this.velocity.length();
       if (this.pinching) this.setPinch(false);
+    }
+  }
+
+  /** Controller rumble (no-op for hands and for browsers without haptics). */
+  buzz(intensity: number, ms: number): void {
+    if (this.isHand) return;
+    const act = (this.src?.gamepad as (Gamepad & { hapticActuators?: { pulse?: (v: number, ms: number) => unknown }[] }) | undefined)
+      ?.hapticActuators?.[0];
+    try {
+      void act?.pulse?.(Math.min(1, intensity), ms);
+    } catch {
+      /* unsupported */
     }
   }
 

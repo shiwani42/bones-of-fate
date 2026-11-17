@@ -46,17 +46,53 @@ Last full run: 16 Nov 2026, on Linux with IWSDK 1.1.0, the IWER emulator (Meta Q
 - **The beard stroke**: first the hand hid inside the torso, then the fingers fell short of the beard, then they went behind it. Now staged with the wrist forward, the elbow out and a knuckle aim in front of the beard.
 - **Text clipped** on all sides (two-line overflow), now fit-to-card. **Text overlapping**: separate regions for dialogue, instructions and title, plus a choreographed intro.
 
+### Visual pass (17 Nov): lighting, grounding, materials
+- **Props rendered as dull metal.** The TRELLIS GLBs have no metal or roughness factors, so glTF's defaults (1, 1) applied. Now set per prop (`props.ts` `surface`): stone, marble, brass.
+- **Reflections came from a generic room.** The IBL is now `textures/palace_env.jpg`, a 50%-desaturated copy of the hall, turned with the dome. Brass lamps, goblets and gold now reflect the palace without turning the board orange.
+- **Props floated on the real floor.** Each one now has a contact shadow baked at load from its own geometry (`contact.ts`): pillars, lamps, both arch feet and the gaddi. The A/B screenshot diff confirmed they render.
+- **Shakuni's hands cast no shadow on the cloth.** They now do, refreshed at about 24 Hz while he idles.
+- **Zari border:** a glossy, slightly metallic mask built from the cloth texture. At full metal it mirrored the dark ceiling and vanished.
+- **KTX2: skipped.** All textures are small WebP (largest about 120 KB, 2048×1024 dome), so there's no visible gain, ETC1S risks blotching the face, and IWSDK would fetch the transcoder from a CDN at runtime.
+- **Antialiasing:** MSAA is on (IWSDK `antialias:true`); foveation is 0.5 (`director.ts`). Frame rate is unverified until H1.
+
+### Hands pass (18 Nov): intent guardrails from Meta's hands-first success stories
+Sources: Chess Club (Odders Lab), Hand Physics Lab (Holonautic) and Table Troopers (Cosmorama) on developers.meta.com. Tested by `scripts/e2e/xr_hands.py`.
+- **Losing your hand no longer throws the dice by accident.** A fast hand (above 0.8 m/s when tracking dropped) is still treated as a throw. A slow one leaves the dice waiting where they were; they glide back into your hand if it returns pinching, and slide back to your side if it returns open or stays away for 2.5 s. A swap already made stays made, and time under the table keeps counting while the hand is out of view.
+- **Brushing past a piece no longer moves it.** Hovering lifts the piece and swells its landing marker with a tick. A pinch chooses at once; a resting fingertip chooses after 0.3 s.
+- **Take-back:** for 2.4 s after a move you chose, touching that piece again undoes it (captures too) and lets you choose again. Desktop: `Z`.
+- **Feedback:** the dice brighten and tick when your hand is in grabbing range. Controllers buzz on grab, throw, flip, choose, take-back and gong.
+- **Wave at Shakuni** (open hand, near head height) and he answers, at most every 25 s.
+- **Instructions follow your input** (Meta's "Hands Onboarding 101"): controller players see "pull the trigger", not "pinch".
+- **Help comes back:** if you haven't picked up the dice after 12 s, the full instruction returns; every third turn, the hint for a trick you haven't tried yet (swap, flip, gong) can play again.
+- **Skipped:** daily puzzles and live-ops (Chess Club's retention), voice commands, and red-tinted virtual hands (passthrough shows your real hands; the waiting dice glow instead).
+
+**The article's other links, and what came of them:**
+| Link | Used? |
+|---|---|
+| Hands Onboarding 101 (linked from the Operator blog) | Yes: input-aware instructions, reminders, recovery after tracking loss. A looping 3D demo hand for the cheats is not built yet. |
+| Hand tracking overview | Confirms "hands complement controllers": both stay supported. Its wide-motion mode is Unity-only. |
+| Mixed reality overview | Already covered: plane detection, depth occlusion, passthrough grounding. |
+| Interaction SDK (Unity/Unreal), Building Blocks | Engine-only; IWSDK is our WebXR equivalent. Their ideas (hover state, grab affordance) are now in. |
+| Voice SDK | Not used: soft-deprecated, Wit.ai needs consent and a privacy policy; captions and TTS already carry the voice. |
+| Meta XR Operator (blog + docs) | Unity/OpenXR. The IWSDK CLI + IWER is our equivalent, and it can drive per-finger hands, which Operator can't yet. |
+| Meta Quest/VR Developer Hub | Optional on Windows for Perfetto traces; `scripts/perf-quest.sh` (metavr) covers Linux. |
+| User Notifications, Developer Posts | Store-app channels; not available to a WebXR URL. |
+| Meta Horizon Start | Its page says Start members compete for up to $100,000, entries by 18 Nov. |
+| Muse Code, Odders Lab site, Store page | Nothing to apply (a coding agent, a company page, a JavaScript-only store page). |
+| YouTube interview | Transcript not fetched (the downloader was blocked); the article is its edited write-up. |
+
 ## 2. Must be checked on a real Quest (the emulator can't prove these)
 
 | # | Check | How |
 |---|---|---|
-| H1 | **72 fps** through the crack + light pillars + petals | `adb` + `metavr` perf capture or OVR Metrics. Budget: about 64 draw calls per eye, about 45k triangles. |
+| H1 | **72 fps** through the crack + light pillars + petals | `bash scripts/perf-quest.sh 20000` (metavr perf capture of Quest Browser, then analyze-trace) or OVR Metrics. Budget: about 64 draw calls per eye, about 45k triangles. If it misses, first set `watchSoft(3 → 6)` in `director.ts` (Shakuni's shadow refresh), then turn off `castShadow` on the human. |
 | H2 | Pinch pickup and throw feel natural; release velocity is believable | Try 10 throws: soft, hard, and an underhand "drop". |
-| H3 | Under-the-table swap with **real hand tracking** below a real table (tracking may drop under the table: the 150 ms grace and `!tracked → throw` path should cope) | Hold the dice under the edge 1 s, bring them back up. |
+| H3 | Under-the-table swap with **real hand tracking** below a real table (tracking may drop under the table: a slow hand freezes the dice and the swap keeps counting; check they come back into the hand) | Hold the dice under the edge 1 s, bring them back up. |
 | H4 | Table plane detected in 2 different rooms; the no-plane fallback (hand placement) works; the two-hand pinch re-places | Rooms with and without a Space Setup table. |
 | H5 | Canvas text readable at arm's length; the Devanagari title shapes correctly | Look at the caption and title. |
 | H8 | Depth occlusion: the real table hides Shakuni's lower body and gaddi (needs Quest 3/3S depth) | Look across the table from a low seat. |
 | H9 | Palace dome: the horizon sits at eye level; the fade line below the walls doesn't cut into the real table | Sit at two different table heights. |
+| H10 | Choosing and take-back feel deliberate, not sticky: 0.3 s dwell, 2.4 s window | Play 5 turns where you have two options; also hand the headset to someone new and watch, without explaining. |
 | H6 | `speechSynthesis` voice present in Quest Browser (optional: captions always show) | Listen during the intro. |
 | H7 | Production URL works logged out, in incognito | Open the Vercel URL on the headset. |
 

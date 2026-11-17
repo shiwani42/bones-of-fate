@@ -3,8 +3,8 @@
   "units": "meters",
   "components": {
     "com.iwsdk.components.IBLTexture": {
-      "src": "room",
-      "intensity": 0.8,
+      "src": "./textures/palace_env.jpg",
+      "intensity": 1.6,
       "rotation": [
         0,
         0.6,

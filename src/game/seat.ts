@@ -11,6 +11,7 @@ import {
   SRGBColorSpace,
   TorusGeometry,
 } from '@iwsdk/core';
+import { bakeContactShadow } from './contact.js';
 
 /**
  * Shakuni's gaddi: a low carved platform with a velvet mattress, gold zari piping,
@@ -98,6 +99,9 @@ export class Gaddi {
       }
     });
     this.setHeight(0.4);
+    // baked floor shadow: the footprint never changes with the seat height
+    const shadow = bakeContactShadow(this.group, { reach: 0.3, opacity: 0.7, pad: 0.26 });
+    if (shadow) this.group.add(shadow);
   }
 
   /** Height of the mattress top above the floor (m). The group origin is the floor. */

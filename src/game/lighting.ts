@@ -5,7 +5,7 @@ import {
   Quaternion,
   Vector3,
   type World,
-} from '@iwsdk/core';
+} from "@iwsdk/core";
 
 /**
  * Board-sized, on-demand shadows (the HandCraft XR recipe).
@@ -29,12 +29,16 @@ const tmpV = new Vector3();
 const tmpQ = new Quaternion();
 
 /** Find the three.js DirectionalLight that IWSDK created for a scene node. */
-export function findSceneLight(world: World, nodeId = 'key-light'): DirectionalLight | null {
+export function findSceneLight(
+  world: World,
+  nodeId = "key-light",
+): DirectionalLight | null {
   const node = world.getSceneObject?.(nodeId);
   if (!node) return null;
   let found: DirectionalLight | null = null;
   node.traverse((o) => {
-    if (!found && (o as DirectionalLight).isDirectionalLight) found = o as DirectionalLight;
+    if (!found && (o as DirectionalLight).isDirectionalLight)
+      found = o as DirectionalLight;
   });
   return found;
 }
@@ -43,7 +47,11 @@ export function findSceneLight(world: World, nodeId = 'key-light'): DirectionalL
  * Slide the light's scene node so the shadow camera is centred on `worldPos`.
  * Returns true when the node actually moved (> 0.5 mm).
  */
-export function aimShadowAt(light: DirectionalLight, worldPos: Vector3, distance = AIM_DISTANCE): boolean {
+export function aimShadowAt(
+  light: DirectionalLight,
+  worldPos: Vector3,
+  distance = AIM_DISTANCE,
+): boolean {
   const node = light.parent;
   if (!node) return false;
   node.updateWorldMatrix(true, false);
@@ -78,10 +86,15 @@ export class ShadowRig {
   private pending = 2;
   private readonly watched: Object3D[] = [];
   private lastPos: Float32Array = new Float32Array(0);
+  /** slow movers (an idling character): refresh at most every `softEvery` frames */
+  private readonly soft: Object3D[] = [];
+  private softPos: Float32Array = new Float32Array(0);
+  private softEvery = 3;
+  private softWait = 0;
   private readonly target = new Vector3();
   private shadowsOn = false;
 
-  constructor(world: World, nodeId = 'key-light') {
+  constructor(world: World, nodeId = "key-light") {
     this.world = world;
     this.nodeId = nodeId;
   }
@@ -90,6 +103,17 @@ export class ShadowRig {
   watch(...objs: Object3D[]): void {
     this.watched.push(...objs);
     this.lastPos = new Float32Array(this.watched.length * 8);
+  }
+
+  /**
+   * Objects that move almost every frame (a breathing character's arms). Their
+   * motion refreshes the shadow map at most once every `every` frames, so an
+   * idle body costs ~24 shadow passes/s instead of 72.
+   */
+  watchSoft(every: number, ...objs: Object3D[]): void {
+    this.soft.push(...objs);
+    this.softPos = new Float32Array(this.soft.length * 8);
+    this.softEvery = Math.max(1, every);
   }
 
   /** Re-render the shadow map for the next `frames` frames. */
@@ -113,29 +137,54 @@ export class ShadowRig {
       this.pending = 3;
     }
     board.getWorldPosition(this.target);
-    if (aimShadowAt(this.light, this.target)) this.pending = Math.max(this.pending, 2);
+    if (aimShadowAt(this.light, this.target))
+      this.pending = Math.max(this.pending, 2);
     if (!board.visible) return;
     // motion detection on watched objects (local pose; cheap, no allocation)
-    const lp = this.lastPos;
-    for (let i = 0; i < this.watched.length; i++) {
-      const o = this.watched[i];
-      const p = o.position;
-      const q = o.quaternion;
-      const k = i * 8;
-      if (
-        Math.abs(lp[k] - p.x) + Math.abs(lp[k + 1] - p.y) + Math.abs(lp[k + 2] - p.z) > 2e-4 ||
-        Math.abs(lp[k + 3] - q.x) + Math.abs(lp[k + 4] - q.y) + Math.abs(lp[k + 5] - q.z) + Math.abs(lp[k + 6] - q.w) > 1e-3 ||
-        Math.abs(lp[k + 7] - o.scale.y) > 1e-3
-      ) {
-        lp[k] = p.x; lp[k + 1] = p.y; lp[k + 2] = p.z;
-        lp[k + 3] = q.x; lp[k + 4] = q.y; lp[k + 5] = q.z; lp[k + 6] = q.w;
-        lp[k + 7] = o.scale.y;
-        this.pending = Math.max(this.pending, 2);
-      }
+    if (moved(this.watched, this.lastPos))
+      this.pending = Math.max(this.pending, 2);
+    if (this.softWait > 0) this.softWait--;
+    else if (moved(this.soft, this.softPos)) {
+      this.pending = Math.max(this.pending, 1);
+      this.softWait = this.softEvery - 1;
     }
     if (this.pending > 0) {
       this.light.shadow.needsUpdate = true;
       this.pending--;
     }
   }
+}
+
+/** True when any object's local pose changed since the last call (updates `lp`). */
+function moved(list: Object3D[], lp: Float32Array): boolean {
+  let any = false;
+  for (let i = 0; i < list.length; i++) {
+    const o = list[i];
+    const p = o.position;
+    const q = o.quaternion;
+    const k = i * 8;
+    if (
+      Math.abs(lp[k] - p.x) +
+        Math.abs(lp[k + 1] - p.y) +
+        Math.abs(lp[k + 2] - p.z) >
+        2e-4 ||
+      Math.abs(lp[k + 3] - q.x) +
+        Math.abs(lp[k + 4] - q.y) +
+        Math.abs(lp[k + 5] - q.z) +
+        Math.abs(lp[k + 6] - q.w) >
+        1e-3 ||
+      Math.abs(lp[k + 7] - o.scale.y) > 1e-3
+    ) {
+      lp[k] = p.x;
+      lp[k + 1] = p.y;
+      lp[k + 2] = p.z;
+      lp[k + 3] = q.x;
+      lp[k + 4] = q.y;
+      lp[k + 5] = q.z;
+      lp[k + 6] = q.w;
+      lp[k + 7] = o.scale.y;
+      any = true;
+    }
+  }
+  return any;
 }

@@ -77,7 +77,30 @@ type Phase =
   | 's_reveal'
   | 'accused'
   | 'handoff'
+  | 'p_takeback'
   | 'gameover';
+
+/**
+ * Hand-tracking guardrails (lessons from Chess Club, Hand Physics Lab and
+ * Table Troopers on Quest): never execute an action the player didn't mean.
+ *  - Tracking lost while holding the dice: a fast hand was throwing (the blur
+ *    lost it), so throw; a slow one slipped out of view, so the dice wait in
+ *    place, glide back to the hand when it returns, or go back to the table.
+ *  - Choosing a piece: hovering previews it (lift, brighter marker, tick); a
+ *    pinch commits at once, a fingertip touch only after a short dwell.
+ *  - A short take-back window after each choice you made.
+ */
+const LOST_THROW_SPEED = 0.8; // m/s: faster than this when tracking dropped = a throw
+const HOLD_WAIT = 2.5; // s the dice wait for a vanished hand
+const TOUCH_DWELL = 0.3; // s a fingertip must rest on a piece to choose it
+const TAKEBACK_WINDOW = 2.4; // s
+const TAKEBACK_REACH = 5; // s, while a hand hovers near the moved piece
+
+const GREETINGS = [
+  'Yes, yes, Prince. I see you.',
+  'Wave all you like. The pasa do not care.',
+  'Greetings are free. Kingdoms are not.',
+];
 
 interface CheatAct {
   kind: 'swap' | 'flip';
@@ -92,6 +115,18 @@ const SHAKUNI_HAND_REST = new Vector3(-0.17, 0.04, -0.42); // resting on the tab
 const SHAKUNI_DICE_SPOT = new Vector3(-0.1, 0, -0.17); // where the dice slide to (within his reach)
 const SHAKUNI_HAND_LIFT = new Vector3(-0.08, 0.2, -0.36);
 const SHAKUNI_HAND_DIP = new Vector3(-0.12, -0.09, -0.36); // below the table top: clipped from view
+
+/**
+ * Instructions follow the input in use (Meta, "Hands Onboarding 101"):
+ * a controller player is never told to pinch.
+ */
+const CONTROLLER_LINES: Partial<Record<keyof typeof LINES, string>> = {
+  moveBoard: 'Tip: hold both triggers for a moment to move the board.',
+  pick: 'Reach the three pasa and pull the trigger',
+  throw: 'Shake them… then let go of the trigger to throw.',
+  choose: 'Touch or trigger a glowing piece',
+  hintFlip: 'Quick — tap a die with your controller tip to tip it over.',
+};
 
 const LINES = {
   intro: 'Welcome, Prince. Sit. The pasa are hungry.',
@@ -165,6 +200,30 @@ export class ChausarSystem extends createSystem({
   private skipNextThrow = false;
   private rattleT = 0;
   private slideStart = 0;
+  /** seconds since the holding hand vanished; -1 while it is tracked */
+  private holdLost = -1;
+  private holdBackT = 0;
+  private readonly holdAnchor = new Vector3();
+  private readonly holdQuat = new Quaternion();
+  /** 0→1: dice glide from where they waited back into the returned hand */
+  private holdResume = 1;
+  private readonly holdFrom = new Vector3();
+  private returnSlide = -1;
+  private inReach = false;
+  // choosing
+  private hoverOpt = -1;
+  private dwellT = 0;
+  private readonly pieceLift = [[0, 0], [0, 0]];
+  // take-back
+  private undo: { snap: GameState; values: number[]; piece: number } | null = null;
+  private takebackArmed = false;
+  private takebackT = 0;
+  private takebacksShown = 0;
+  // wave at Shakuni
+  private readonly waveFlips: [number[], number[]] = [[], []];
+  private readonly waveSign = [0, 0];
+  private waveCooldown = 0;
+  private greetIdx = 0;
 
   // move animation
   private hop: { seat: Seat; piece: number; path: number[]; i: number; t: number; then: () => void } | null = null;
@@ -199,6 +258,14 @@ export class ChausarSystem extends createSystem({
   private readonly invM = new Matrix4();
   private readonly headLocal = new Vector3();
   private readonly headWorld = new Vector3();
+  /** cheats and the gong the player has used this match (unused ones get their hint again) */
+  private readonly used = new Set<'swap' | 'flip' | 'gong'>();
+
+  /** The instruction for `key`, worded for hands or controllers. */
+  private line(key: keyof typeof LINES): string {
+    const hands = this.hands.both.some((h) => h.tracked && h.isHand) || !this.hands.both.some((h) => h.tracked);
+    return (!hands && CONTROLLER_LINES[key]) || LINES[key];
+  }
 
   init(): void {
     void loadFonts().then(() => this.refreshTitle());
@@ -222,6 +289,7 @@ export class ChausarSystem extends createSystem({
       if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} human ${ok ? 'loaded' : 'FALLBACK'}`);
       if (ok) {
         this.shadows.watch(this.shakuni.group);
+        this.shadows.watchSoft(3, ...this.shakuni.human!.shadowBones());
         // real-world depth hides whatever of him is behind your real table (Quest 3/3S)
         for (const obj of [this.shakuni.human!.root, this.shakuni.seat.group]) {
           const e = this.world.createTransformEntity(obj, { parent: this.shakuniEntity, persistent: true });
@@ -420,6 +488,7 @@ export class ChausarSystem extends createSystem({
 
   private resetMatch(): void {
     this.state = newGame();
+    this.used.clear();
     this.skipNextThrow = false;
     this.sTurnCount = 0;
     this.shakuni.suspicion = 20;
@@ -490,6 +559,9 @@ export class ChausarSystem extends createSystem({
   // ───────────────────────── main loop ─────────────────────────
 
   update(delta: number, time: number): void {
+    // reflections come from the palace itself: keep the IBL (scene JSON: palace_env.jpg, a desaturated copy)
+    // turned with the painted hall, whose centre sits behind Shakuni
+    if (this.anchor) this.world.scene.environmentRotation.y = this.anchor.rotation.y + Math.PI / 2;
     if (!this.anchorEntityReady) return;
     if (this.world.visibilityState.peek() === VisibilityState.VisibleBlurred) return;
     const dt = Math.min(delta, 1 / 20);
@@ -505,12 +577,13 @@ export class ChausarSystem extends createSystem({
     switch (this.phase) {
       case 'placing': this.updatePlacing(dt); break;
       case 'intro': this.updateIntro(); break;
-      case 'p_ready': this.updateReady(); break;
+      case 'p_ready': this.updateReady(dt); break;
       case 'p_holding': this.updateHolding(dt); break;
       case 'p_flying': this.updatePFlying(); break;
       case 'p_reveal': this.updatePReveal(dt); break;
       case 'caught': this.updateCaught(); break;
-      case 'p_choose': this.updateChoose(); break;
+      case 'p_choose': this.updateChoose(dt); break;
+      case 'p_takeback': this.updateTakeback(dt); break;
       case 'moving': break;
       case 's_throw': this.updateSThrow(dt); break;
       case 's_flying': this.updateSFlying(); break;
@@ -522,6 +595,7 @@ export class ChausarSystem extends createSystem({
     }
 
     this.updateGong(dt);
+    this.updateWave(dt);
     this.updateHop(dt);
     this.updatePieces(dt);
     this.dice.update(dt);
@@ -560,6 +634,7 @@ export class ChausarSystem extends createSystem({
         [0.12, 0.44, -0.12, 0, 0.4, -0.62], // face close-up
         [0.35, 0.35, 0.35, 0, 0.05, -0.62], // seated body + gaddi
         [0.95, 0.25, -0.62, 0, 0.1, -0.62], // side profile
+        [1.1, 0.45, 0.1, 0.55, -0.72, -0.95], // set: lamp and gaddi bases with their floor shadows
       ];
       const [px, py, pz, lx, ly, lz] = views[this.devCam];
       this.camera.position.copy(this.anchor.localToWorld(this.tA.set(px, py, pz)));
@@ -608,14 +683,15 @@ export class ChausarSystem extends createSystem({
     }
     if (this.keys.has('m')) sfx.muted = !sfx.muted;
     if (import.meta.env.DEV) {
-      // test hooks: k = Shakuni looks away, w/l = put a piece near home
+      // test hooks: k = Shakuni looks away, w/l = put a piece near home, o = split your pieces (two choices)
       if (this.keys.has('k')) this.shakuni.setGaze('away', 6);
       if (this.keys.has('w')) { this.state.pos[0][0] = HOME - 4; this.layoutPieces(true); }
       if (this.keys.has('l')) { this.state.pos[1][0] = HOME - 4; this.layoutPieces(true); }
+      if (this.keys.has('o')) { this.state.pos[0][0] = 3; this.state.pos[0][1] = START; this.layoutPieces(true); }
       if (this.keys.has('x')) this.triggerCrack(0);
       if (this.keys.has('v')) this.finish(0);
-      // review cameras: c cycles face close-up / seated body / side profile / off
-      if (this.keys.has('c')) this.devCam = (this.devCam + 1) % 4;
+      // review cameras: c cycles face close-up / seated body / side profile / set / off
+      if (this.keys.has('c')) this.devCam = (this.devCam + 1) % 5;
       if (this.keys.has('b')) this.shakuni.strokeBeard();
       if (this.keys.has('h')) this.shakuni.laughT = 2;
       if (this.keys.has('j')) this.shakuni.angerT = 2;
@@ -789,7 +865,7 @@ export class ChausarSystem extends createSystem({
       sfx.speak(`${LINES.intro} Today I wager ${stakeName(this.ledger)}.`);
       this.shakuni.talk(LINES.intro);
       this.introEnd += this.subs.say(LINES.rules, 'narrator');
-      if (this.immersive) this.introEnd += this.subs.say(LINES.moveBoard, 'narrator') * 0.5;
+      if (this.immersive) this.introEnd += this.subs.say(this.line('moveBoard'), 'narrator') * 0.5;
       this.shown.add('rules');
     }
     const skip = t > 3.6 && (this.hands.left.pinchStarted || this.hands.right.pinchStarted || this.keys.has(' '));
@@ -818,6 +894,9 @@ export class ChausarSystem extends createSystem({
         return;
       }
       this.holder = null;
+      this.holdLost = -1;
+      this.returnSlide = -1;
+      this.inReach = false;
       this.underT = 0;
       this.underSeenT = 0;
       this.loaded = false;
@@ -826,7 +905,13 @@ export class ChausarSystem extends createSystem({
       this.setPhase('p_ready');
       this.shakuni.cycling = false;
       this.playerTurns++;
-      this.pickHintText = this.playerTurns <= 1 ? LINES.pick : 'Your throw';
+      this.pickHintText = this.playerTurns <= 1 ? this.line('pick') : 'Your throw';
+      // contextual reminders: every third turn, re-offer the hint for a trick not yet tried
+      if (this.playerTurns > 1 && this.playerTurns % 3 === 1) {
+        if (!this.used.has('swap')) this.shown.delete('hintSwap');
+        if (!this.used.has('flip')) this.shown.delete('hintFlip');
+        if (!this.used.has('gong')) this.shown.delete('hintGong');
+      }
     } else {
       this.beginShakuniTurn();
     }
@@ -844,26 +929,50 @@ export class ChausarSystem extends createSystem({
   private introEnd = 99;
   private playerTurns = 0;
 
-  private updateReady(): void {
-    if (this.phaseT < (this.pickHintText === 'Your throw' ? 3 : 60)) {
+  private updateReady(dt: number): void {
+    // dice coming back to the table after a cancelled hold
+    if (this.returnSlide >= 0) {
+      this.returnSlide = Math.min(1, this.returnSlide + dt / 0.45);
+      const e = this.returnSlide;
+      this.dice.updateSlide(e * e * (3 - 2 * e));
+      if (e >= 1) this.returnSlide = -1;
+      else return;
+    }
+    // a short "Your throw" later on, but the full instruction again if nothing happens for 12 s
+    const stuck = this.phaseT > 12;
+    if (this.phaseT < (this.pickHintText === 'Your throw' ? 3 : 60) || stuck) {
       let cx = 0, cz = 0;
       for (const d of this.dice.dice) { cx += d.pos.x / 3; cz += d.pos.z / 3; }
-      this.hint.show(this.pickHintText, this.tB.set(cx, SURFACE_Y, cz), 0.1);
+      this.hint.show(stuck && this.pickHintText === 'Your throw' ? this.line('pick') : this.pickHintText, this.tB.set(cx, SURFACE_Y, cz), 0.1);
     } else this.hint.hide();
+    // a hand within grabbing range: the dice brighten and tick, so you know a pinch will take them
+    let reach: HandState | null = null;
+    for (const h of this.hands.both) {
+      if (h.tracked && this.nearestDieDist(this.toLocal(h.pinchPoint, this.tA)) < 0.07) reach = h;
+    }
+    if (reach && !this.inReach) {
+      sfx.tap(0, 1.5);
+      reach.buzz(0.2, 20);
+    }
+    this.inReach = !!reach;
     // gentle pulse so the dice say "pick me up"
-    const pulse = 0.15 + 0.15 * Math.sin(this.time * 4);
-    this.dice.dice.forEach((d) => d.setGlow(pulse, '#ffcc55'));
+    const pulse = reach ? 0.55 : 0.15 + 0.15 * Math.sin(this.time * 4);
+    this.dice.dice.forEach((d) => d.setGlow(pulse, reach ? '#ffe08a' : '#ffcc55'));
     for (const h of this.hands.both) {
       if (!h.pinchStarted) continue;
       const p = this.toLocal(h.pinchPoint, this.tA);
       if (this.nearestDieDist(p) < 0.07) {
         this.holder = h;
+        this.holdLost = -1;
+        this.holdResume = 1;
+        this.inReach = false;
         this.accuseOpen = false;
-        this.dice.dice.forEach((d) => d.setGlow(0));
+        this.dice.dice.forEach((d) => d.setGlow(this.loaded ? 0.6 : 0, '#ffcf4a'));
         sfx.rattle();
+        h.buzz(0.4, 40);
         this.shakuni.cycling = true;
         this.shakuni.setGaze('watch', 1.2 + Math.random());
-        if (!this.shown.has('throw')) this.say('throw', LINES.throw, false, false, 4);
+        if (!this.shown.has('throw')) this.say('throw', this.line('throw'), false, false, 4);
         this.setPhase('p_holding');
         return;
       }
@@ -885,8 +994,33 @@ export class ChausarSystem extends createSystem({
 
   private updateHolding(dt: number): void {
     const h = this.holder!;
+    if (this.holdLost >= 0) {
+      this.updateHoldLost(dt, h);
+      return;
+    }
+    if (!h.tracked && !this.keys.has(' ')) {
+      // pinchPoint/velocity still hold the last good sample
+      if (h.lostSpeed > LOST_THROW_SPEED) {
+        if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} hold lost at ${h.lostSpeed.toFixed(2)} m/s → throw`);
+        this.tB.copy(h.velocity).applyQuaternion(this.invQ);
+        this.throwFromHand(this.holdAnchor, this.tB, h.lostSpeed);
+      } else {
+        if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} hold lost at ${h.lostSpeed.toFixed(2)} m/s → dice wait`);
+        this.holdLost = 0;
+        this.holdBackT = 0;
+      }
+      return;
+    }
     const anchor = this.toLocal(h.pinchPoint, this.tA);
     this.tQ.copy(this.invQ).multiply(h.palmQuat);
+    if (this.holdResume < 1) {
+      // glide from where the dice waited back into the hand (never snap)
+      this.holdResume = Math.min(1, this.holdResume + dt / 0.22);
+      const e = this.holdResume;
+      anchor.lerpVectors(this.holdFrom, anchor, e * e * (3 - 2 * e));
+    }
+    this.holdAnchor.copy(anchor);
+    this.holdQuat.copy(this.tQ);
     const speed = h.velocity.length();
     this.dice.holdAt(anchor, this.tQ, this.time, Math.min(1, speed * 0.8));
     this.rattleT -= dt;
@@ -895,14 +1029,71 @@ export class ChausarSystem extends createSystem({
       this.rattleT = 0.12;
     }
     this.shakuni.lookTarget.copy(anchor);
+    this.trackSwap(anchor.y, dt);
 
-    // Cheat 1: the under-the-table swap
-    if (anchor.y < -0.04) {
+    if (this.keys.has('u') && !this.loaded) {
+      this.loaded = true;
+      this.acts.push({ kind: 'swap', seen: this.shakuni.watching });
+      sfx.sparkle();
+    }
+
+    if (h.pinchEnded || this.keys.has(' ')) {
+      this.tB.copy(h.velocity).applyQuaternion(this.invQ);
+      this.throwFromHand(anchor, this.tB, speed);
+    }
+  }
+
+  /** The holding hand is out of view: the dice wait where they were. */
+  private updateHoldLost(dt: number, h: HandState): void {
+    this.holdLost += dt;
+    // cameras often lose a hand below the table edge: the swap keeps counting
+    this.trackSwap(this.holdAnchor.y, dt);
+    const warn = 0.25 + 0.2 * Math.sin(this.time * 7);
+    if (!this.loaded) this.dice.dice.forEach((d) => d.setGlow(warn, '#ff7a4a'));
+    if (this.holdLost > 0.6) this.hint.show('Show your hand again — the dice will wait', this.holdAnchor, 0.08);
+    if (h.tracked) {
+      const p = this.toLocal(h.pinchPoint, this.tA);
+      if (h.pinching && p.distanceTo(this.holdAnchor) < 0.3) {
+        if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} hold resumed after ${this.holdLost.toFixed(2)} s`);
+        this.holdLost = -1;
+        this.holdResume = 0;
+        this.holdFrom.copy(this.holdAnchor);
+        this.hint.hide();
+        this.dice.dice.forEach((d) => d.setGlow(this.loaded ? 0.6 : 0, '#ffcf4a'));
+        sfx.rattle();
+        return;
+      }
+      // back in view with the fingers open: you let go while unseen. Don't guess a throw.
+      this.holdBackT += dt;
+      if (this.holdBackT > 0.3) this.cancelHold('released out of view');
+      return;
+    }
+    if (this.holdLost > HOLD_WAIT) this.cancelHold('timeout');
+  }
+
+  /** Abandon a hold without throwing: the dice slide back to your side of the board. */
+  private cancelHold(why: string): void {
+    if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} hold cancelled (${why})`);
+    this.holder = null;
+    this.holdLost = -1;
+    this.hint.hide();
+    this.dice.dice.forEach((d) => d.setGlow(0));
+    this.dice.beginSlide(PLAYER_DICE_SPOT, 0.4);
+    this.returnSlide = 0;
+    this.pickHintText = 'Pick the dice up again';
+    sfx.tap(0, 0.8);
+    this.setPhase('p_ready'); // loaded / acts are kept: a swap already made stays made
+  }
+
+  /** Cheat 1: the under-the-table swap. */
+  private trackSwap(anchorY: number, dt: number): void {
+    if (anchorY < -0.04) {
       this.underT += dt;
       if (this.shakuni.watching) this.underSeenT += dt;
       if (this.underT > 0.5 && !this.loaded) {
         this.loaded = true;
         this.acts.push({ kind: 'swap', seen: this.underSeenT > 0.25 });
+        this.used.add('swap');
         sfx.sparkle();
         this.dice.dice.forEach((d) => d.setGlow(0.9, '#ffcf4a'));
       }
@@ -918,17 +1109,6 @@ export class ChausarSystem extends createSystem({
       this.underT = 0;
       this.underSeenT = 0;
       if (this.loaded) this.dice.dice.forEach((d) => d.setGlow(Math.max(0, d.glowMats[0].emissiveIntensity - dt * 1.5)));
-    }
-
-    if (this.keys.has('u') && !this.loaded) {
-      this.loaded = true;
-      this.acts.push({ kind: 'swap', seen: this.shakuni.watching });
-      sfx.sparkle();
-    }
-
-    if (h.pinchEnded || !h.tracked || this.keys.has(' ')) {
-      this.tB.copy(h.velocity).applyQuaternion(this.invQ);
-      this.throwFromHand(anchor, this.tB, speed);
     }
   }
 
@@ -952,7 +1132,9 @@ export class ChausarSystem extends createSystem({
       : null;
     this.dice.release(v, 14 + speed * 6, forced);
     sfx.whoosh();
+    this.holder?.buzz(0.7, 60);
     this.holder = null;
+    this.holdLost = -1;
     this.setPhase('p_flying');
   }
 
@@ -989,7 +1171,7 @@ export class ChausarSystem extends createSystem({
     this.throwValues = this.dice.values;
     this.showTotal(this.throwValues);
     const v = this.throwValues;
-    if (!this.shakuni.watching && !this.loaded) this.say('hintFlip', LINES.hintFlip, true);
+    if (!this.shakuni.watching && !this.loaded) this.say('hintFlip', this.line('hintFlip'), true);
 
     // Cheat 2: poke a die to tip it onto the next face
     this.flipCooldown -= dt;
@@ -1001,6 +1183,7 @@ export class ChausarSystem extends createSystem({
           if (d.mode !== 'rest') continue;
           if (d.pos.distanceTo(tip) < 0.028 && tip.y < d.pos.y + 0.03) {
             this.flipDie(d);
+            h.buzz(0.5, 30);
             break;
           }
         }
@@ -1023,6 +1206,7 @@ export class ChausarSystem extends createSystem({
     d.flip();
     sfx.clack(0.7);
     this.acts.push({ kind: 'flip', seen: this.shakuni.watching });
+    this.used.add('flip');
     this.flipCooldown = 0.45;
     this.phaseT = Math.min(this.phaseT, 2); // give a moment after each flip
   }
@@ -1088,6 +1272,7 @@ export class ChausarSystem extends createSystem({
   }
 
   private beginChoose(seat: Seat, values: number[]): void {
+    this.undo = null; // only a move you chose between options can be taken back
     this.options = legalMoves(this.state, seat, rollTotal(values));
     if (this.options.length === 1 || seat === 1) {
       const m = seat === 1 ? bestMove(this.state, 1, rollTotal(values)) : this.options[0];
@@ -1103,6 +1288,11 @@ export class ChausarSystem extends createSystem({
     });
 
     this.setPhase('p_choose');
+    if (import.meta.env.DEV) {
+      const at = this.options.map((m) => this.anchor.localToWorld(this.board.pieces[0][m.piece].mesh.position.clone()).toArray().map((v) => +v.toFixed(3)));
+      const to = this.options.map((_, i) => this.anchor.localToWorld(this.board.markers[i].position.clone()).toArray().map((v) => +v.toFixed(3)));
+      console.info(`[chausar] #${this.logTag()} choose at=${JSON.stringify(at)} to=${JSON.stringify(to)}`);
+    }
   }
 
   private markerPos(m: Move, out: Vector3): void {
@@ -1110,41 +1300,134 @@ export class ChausarSystem extends createSystem({
     else piecePosition(m.seat, m.to, 0, 0, out).setY(SURFACE_Y + 0.002);
   }
 
-  private updateChoose(): void {
+  /**
+   * Hover previews (the piece lifts, its landing marker swells, a soft tick);
+   * a pinch commits at once, a resting fingertip after TOUCH_DWELL. A finger
+   * brushing past on its way to the other piece no longer moves anything.
+   */
+  private updateChoose(dt: number): void {
     const first = this.board.pieces[0][this.options[0].piece].mesh.position;
-    this.hint.show(LINES.choose, this.tB.copy(first), 0.09);
-    const pulse = 0.35 + 0.35 * Math.sin(this.time * 5);
-    this.options.forEach((m, i) => {
-      this.board.pieces[0][m.piece].setGlow(pulse);
-      this.board.markers[i].scale.setScalar(1 + 0.15 * Math.sin(this.time * 5));
-    });
-    let chosen: Move | null = null;
+    this.hint.show(this.line('choose'), this.tB.copy(first), 0.09);
+    let chosen = -1;
+    let hover = -1;
+    let hoverD = Infinity;
+    let touching = false;
+    let by: HandState | null = null;
     for (const h of this.hands.both) {
       if (!h.tracked) continue;
       const pinch = h.pinchStarted ? this.toLocal(h.pinchPoint, this.tA) : null;
       const tip = this.toLocal(h.indexTip, this.tB);
+      const pp = h.pinchStarted ? null : this.toLocal(h.pinchPoint, this.tA);
       this.options.forEach((m, i) => {
         const piece = this.board.pieces[0][m.piece].mesh.position;
         const marker = this.board.markers[i].position;
-        if (pinch && (pinch.distanceTo(piece) < 0.035 || pinch.distanceTo(marker) < 0.03)) chosen = m;
-        if (tip.distanceTo(this.tC.copy(piece).setY(piece.y + 0.015)) < 0.02) chosen = m;
+        if (pinch && (pinch.distanceTo(piece) < 0.035 || pinch.distanceTo(marker) < 0.03)) {
+          chosen = i;
+          by = h;
+        }
+        const dTip = tip.distanceTo(this.tC.copy(piece).setY(piece.y + 0.015));
+        const d = Math.min(dTip, pp ? pp.distanceTo(piece) : Infinity);
+        if (d < 0.045 && d < hoverD) {
+          hoverD = d;
+          hover = i;
+          touching = dTip < 0.02;
+          by = by ?? h;
+        }
       });
     }
-    if (this.keys.has('1')) chosen = this.options[0];
-    if (this.keys.has('2') && this.options[1]) chosen = this.options[1];
-    if (chosen) {
+    if (hover !== this.hoverOpt) {
+      this.dwellT = 0;
+      if (hover >= 0) {
+        sfx.tap(0, 1.3);
+        (by as HandState | null)?.buzz(0.15, 15);
+      }
+      this.hoverOpt = hover;
+    }
+    this.dwellT = touching ? this.dwellT + dt : Math.max(0, this.dwellT - dt * 2);
+    if (touching && this.dwellT >= TOUCH_DWELL) chosen = hover;
+
+    const pulse = 0.35 + 0.35 * Math.sin(this.time * 5);
+    this.options.forEach((m, i) => {
+      const on = i === hover;
+      // the hovered piece brightens as the dwell fills; the others step back
+      this.board.pieces[0][m.piece].setGlow(on ? 0.8 + 0.6 * Math.min(1, this.dwellT / TOUCH_DWELL) : hover >= 0 ? 0.15 : pulse);
+      this.board.markers[i].scale.setScalar(on ? 1.4 : hover >= 0 ? 0.85 : 1 + 0.15 * Math.sin(this.time * 5));
+    });
+
+    if (this.keys.has('1')) chosen = 0;
+    if (this.keys.has('2') && this.options[1]) chosen = 1;
+    if (chosen >= 0) {
       sfx.select();
+      (by as HandState | null)?.buzz(0.5, 40);
+      const m = this.options[chosen];
+      this.undo = { snap: cloneState(this.state), values: this.throwValues.slice(), piece: m.piece };
       this.clearChoice();
-      this.executeMove(chosen, this.throwValues);
+      this.executeMove(m, this.throwValues);
     }
   }
 
   private clearChoice(): void {
+    this.hoverOpt = -1;
+    this.dwellT = 0;
     for (const p of this.board.pieces[0]) {
       p.setGlow(0);
       p.setHighlight(false);
     }
     for (const m of this.board.markers) m.visible = false;
+  }
+
+  /** A moment to take the move back: touch the piece you just moved. */
+  private updateTakeback(dt: number): void {
+    const u = this.undo;
+    if (!u) {
+      this.setPhase('handoff');
+      return;
+    }
+    const piece = this.board.pieces[0][u.piece];
+    const at = piece.mesh.position;
+    if (import.meta.env.DEV && this.phaseT > 0.5 && this.once('log')) {
+      const w = this.anchor.localToWorld(this.tA.copy(at)).toArray().map((v) => +v.toFixed(3));
+      console.info(`[chausar] #${this.logTag()} takeback at=${JSON.stringify(w)}`);
+    }
+    if (this.takebacksShown < 2) this.hint.show('Touch it again to take back', at, 0.07);
+    piece.setGlow(0.25 + 0.2 * Math.sin(this.time * 6));
+    // the hand that just chose must leave the piece before a touch counts again
+    let near = false;
+    let reaching = false;
+    let touch: HandState | null = null;
+    for (const h of this.hands.both) {
+      if (!h.tracked) continue;
+      const tip = this.toLocal(h.indexTip, this.tA);
+      const pp = this.toLocal(h.pinchPoint, this.tB);
+      const top = this.tC.copy(at).setY(at.y + 0.015);
+      if (tip.distanceTo(top) < 0.06 || pp.distanceTo(at) < 0.06) near = true;
+      if (tip.distanceTo(top) < 0.12) reaching = true;
+      if (tip.distanceTo(top) < 0.022 || (h.pinchStarted && pp.distanceTo(at) < 0.035)) touch = h;
+    }
+    if (!near) this.takebackArmed = true;
+    this.takebackT = this.takebackArmed && touch ? this.takebackT + dt : 0;
+    const pinched = !!touch && (touch as HandState).pinchStarted;
+    if (this.keys.has('z') || (this.takebackArmed && touch && (pinched || this.takebackT > 0.2))) {
+      if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} take back`);
+      (touch as HandState | null)?.buzz(0.4, 40);
+      sfx.whoosh();
+      piece.setGlow(0);
+      this.state = cloneState(u.snap);
+      this.undo = null;
+      this.layoutPieces(false); // pieces (and anything captured) drift back
+      this.say('', 'Change of heart, Prince? Choose again.', false, true, 2.5);
+      this.beginChoose(0, u.values);
+      return;
+    }
+    // a hand reaching back toward the piece keeps the window open a little longer
+    if (this.phaseT > (reaching && this.takebackArmed ? TAKEBACK_REACH : TAKEBACK_WINDOW)) {
+      if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} takeback closed t=${this.phaseT.toFixed(2)} armed=${this.takebackArmed} reaching=${reaching} near=${near}`);
+      piece.setGlow(0);
+      this.undo = null;
+      this.takebacksShown++;
+      this.setPhase('handoff');
+      this.phaseT = 0.7; // the window already gave the pause handoff would wait for
+    }
   }
 
   // ── moving
@@ -1183,6 +1466,12 @@ export class ChausarSystem extends createSystem({
         }
         if (res.extraTurn) {
           this.say('', m.seat === 0 ? 'Throw again!' : 'Shakuni throws again.', false, false, 2.5);
+        }
+        if (m.seat === 0 && this.undo) {
+          this.takebackArmed = false;
+          this.takebackT = 0;
+          this.setPhase('p_takeback');
+          return;
         }
         this.setPhase('handoff');
       },
@@ -1243,7 +1532,10 @@ export class ChausarSystem extends createSystem({
         const dist = Math.hypot(t.x - m.x, t.z - m.z);
         m.x += (t.x - m.x) * k;
         m.z += (t.z - m.z) * k;
-        m.y = t.y + Math.min(0.06, dist * 0.6);
+        // a hovered choice lifts a little off the board (a preview, nothing committed)
+        const want = this.phase === 'p_choose' && seat === 0 && this.hoverOpt >= 0 && this.options[this.hoverOpt]?.piece === pi ? 0.014 : 0;
+        this.pieceLift[seat][pi] += (want - this.pieceLift[seat][pi]) * k;
+        m.y = t.y + Math.min(0.06, dist * 0.6) + this.pieceLift[seat][pi];
       }
   }
 
@@ -1390,6 +1682,7 @@ export class ChausarSystem extends createSystem({
       const pin = this.toLocal(h.pinchPoint, this.tB);
       if (tip.distanceTo(this.board.gongCenter) < 0.055 || (h.pinchStarted && pin.distanceTo(this.board.gongCenter) < 0.07)) {
         struck = true;
+        h.buzz(1, 90);
       }
     }
     if (!struck) return;
@@ -1408,8 +1701,49 @@ export class ChausarSystem extends createSystem({
     this.accuse();
   }
 
+  /**
+   * Players talk with their hands (Chess Club answered gestures with emoji):
+   * an open hand raised and waved side to side gets a reply from Shakuni.
+   */
+  private updateWave(dt: number): void {
+    this.waveCooldown -= dt;
+    // not while the hands are busy with the game (holding, poking, choosing) or a verdict is on screen
+    const quiet =
+      this.phase !== 'boot' && this.phase !== 'placing' && this.phase !== 'p_holding' && this.phase !== 'p_reveal' &&
+      this.phase !== 'p_choose' && this.phase !== 'p_takeback' && this.phase !== 'caught' && this.phase !== 'accused';
+    for (let s = 0; s < 2; s++) {
+      const h = this.hands.both[s];
+      const flips = this.waveFlips[s];
+      while (flips.length && this.time - flips[0] > 1.6) flips.shift();
+      if (!h.tracked || !h.isHand || h.pinching) {
+        flips.length = 0;
+        this.waveSign[s] = 0;
+        continue;
+      }
+      const palm = this.toLocal(h.palm, this.tA);
+      if (palm.y < this.headLocal.y - 0.3) {
+        flips.length = 0;
+        continue;
+      }
+      const vx = this.tB.copy(h.velocity).applyQuaternion(this.invQ).x;
+      if (Math.abs(vx) < 0.3) continue;
+      const sign = vx > 0 ? 1 : -1;
+      if (this.waveSign[s] !== 0 && sign !== this.waveSign[s]) flips.push(this.time);
+      this.waveSign[s] = sign;
+      if (flips.length >= 3 && quiet && this.waveCooldown <= 0) {
+        flips.length = 0;
+        this.waveCooldown = 25;
+        if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} wave`);
+        this.shakuni.setGaze('focus', 2);
+        this.shakuni.laughT = 0.8;
+        this.say('', GREETINGS[this.greetIdx++ % GREETINGS.length], false, true, 2.5);
+      }
+    }
+  }
+
   private accuse(): void {
     this.accuseOpen = false;
+    this.used.add('gong');
     if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} accuse cheated=${this.sCheat} phase=${this.phase}`);
     if (this.sCheat) {
       // Caught him: undo his whole turn and send his leading piece back.

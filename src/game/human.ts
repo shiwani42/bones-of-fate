@@ -95,6 +95,10 @@ export class ShakuniHuman {
         m.frustumCulled = false; // skinned bounds are unreliable
         if (/high-poly/i.test(m.name)) this.eyeMeshes.push(m);
         if (/tongue|teeth/i.test(m.name)) m.visible = false; // poke through closed lips; the mouth barely opens
+        // his hands and sleeves shadow the cloth when they reach over the table (grounding);
+        // no self-shadowing: skinned self-shadows only add acne at this map resolution
+        m.castShadow = !/high-poly|eyelash|eyebrow|tongue|teeth/i.test(m.name);
+        m.receiveShadow = false;
         if (m.morphTargetDictionary && Object.keys(m.morphTargetDictionary).some((k) => k.startsWith('blink'))) {
           this.morphMeshes.push(m);
         }
@@ -177,6 +181,17 @@ export class ShakuniHuman {
 
   get ok(): boolean {
     return !!this.bone('head') && !!this.bone('wrist.R');
+  }
+
+  /** Arm bones whose motion should refresh the table shadow map. */
+  shadowBones(): Object3D[] {
+    const out: Object3D[] = [];
+    for (const side of ['L', 'R'])
+      for (const n of [`upperarm01.${side}`, `lowerarm01.${side}`, `wrist.${side}`]) {
+        const b = this.bone(n);
+        if (b) out.push(b);
+      }
+    return out;
   }
 
   private bone(name: string): Bone | undefined {
