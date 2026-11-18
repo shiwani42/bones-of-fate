@@ -4,9 +4,15 @@
 
 The Mahabharata's rigged dice game, on your real table. Throw Shakuni's dice with your own hands, cheat when he looks away, and catch him when he cheats.
 
+## Try it out
+
+https://chausar-zeta.vercel.app (open in Quest Browser on Quest 3 or 3S)
+
+https://github.com/shiwani42/chausar
+
 ## Built with
 
-webxr iwsdk three.js typescript vite meta-quest quest-browser hand-tracking mixed-reality passthrough plane-detection depth-occlusion webgl web-audio-api web-speech-api canvas-2d blender makehuman mpfb flux trellis hugging-face poly-haven python iwer gltf claude-code
+webxr iwsdk three.js typescript vite vercel meta-quest quest-browser hand-tracking mixed-reality passthrough plane-detection depth-occlusion webgl web-audio-api web-speech-api canvas-2d blender makehuman mpfb flux trellis hugging-face poly-haven python iwer gltf claude-code
 
 ## About the project
 
@@ -64,6 +70,5 @@ Everything was made with free tools.
 ## What's next
 
 - **Headset testing.** So far everything is verified in the emulator. Next we need to test on Quest 3 and 3S: frame rate, real throws, tracking under real tables, different rooms, and playtests with people new to VR.
-- **A public link** that judges and players can open in Quest Browser.
 - **Review by people who know the material.** We are not scholars of the Mahabharata or of traditional chaupar, and we'd like people who are to review the rules, the wording and how the story is framed.
 - More of the court, such as the Pandavas and Duryodhana watching the game, if it can be done at the same quality as Shakuni without crowding the table.

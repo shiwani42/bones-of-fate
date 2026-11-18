@@ -50,3 +50,5 @@ opencode.json
 # Raw asset-generation intermediates (reproducible via tools/; only optimised outputs ship)
 tools/polyhaven/raw/
 tools/freegen/out/*.glb
+.vercel
+.env*
