@@ -67,6 +67,13 @@ Sources: Chess Club (Odders Lab), Hand Physics Lab (Holonautic) and Table Troope
 - **Help comes back:** if you haven't picked up the dice after 12 s, the full instruction returns; every third turn, the hint for a trick you haven't tried yet (swap, flip, gong) can play again.
 - **Skipped:** daily puzzles and live-ops (Chess Club's retention), voice commands, and red-tinted virtual hands (passthrough shows your real hands; the waiting dice glow instead).
 
+### Concept pass (18 Nov): the game that was decided before it began
+From a concept note on the Dyuta Sabha (see `docs/RESEARCH.md` §6). Tested in `xr_core.py` and `xr_cheats.py`.
+- **Shakuni names the total of a loaded throw while his dice are in the air** (three loaded throws in four; always on his scripted first cheat). After honest throws he sometimes names it, but only once it has landed.
+- **The dice legend:** the first catch per visit floats his dice in front of you (about 0.43 m away, below the captions), 1.5× and turning in violet light, while the legend is told; a touch spins them. Dev key `7`.
+- **Gold on the table** (`src/game/stakes.ts`): eight stacks of ten mohurs, one instanced draw call, swept coin by coin with a synthesised clink. Dev keys `5` / `6`.
+- **A closing reflection** at game over, chosen from per-match counts (cheats landed, Shakuni's cheats caught or missed).
+
 **The article's other links, and what came of them:**
 | Link | Used? |
 |---|---|

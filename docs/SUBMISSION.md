@@ -23,6 +23,10 @@ Deadline: **Wed 18 Nov 2026, 12:00 PM PST = Thu 19 Nov, 1:30 AM IST.** Submit se
 >
 > But Shakuni cheats too. Watch his ghostly hand: if it dips below the table before he throws, **strike the gong** to accuse him. If you're right, his side cracks and his turn is undone. If you're wrong, you lose your next throw.
 >
+> His tells are learnable: the hand that slips under the table, and the total he names while his dice are still in the air. He only knows it because the game was decided before it began. Catch him for the first time and his dice rise before you to be inspected while the legend is told: the old tellings say they were carved from his father's bones.
+>
+> The wager sits on your table as stacks of gold that sweep across to whoever captures, and the match ends with a question the epic leaves open: if you beat a cheat by cheating, who was the fairer player?
+>
 > Each win raises the stakes, as in the epic: gold, a chariot, elephants, an army, the treasury, and finally the kingdom itself.
 
 **How we built it**

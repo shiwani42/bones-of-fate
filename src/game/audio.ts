@@ -112,6 +112,20 @@ export class Sfx {
   }
 
   /** Bone pasa hitting cloth-over-wood or each other. */
+  /** Gold coins settling on a stack: a cascade of short, bright metallic pings. */
+  coins(count = 6, pan = 0): void {
+    if (!this.ok()) return;
+    for (let i = 0; i < count; i++) {
+      const when = i * (0.035 + Math.random() * 0.03);
+      const f = 2400 + Math.random() * 1400;
+      const v = 0.07 * (1 - i / (count + 2));
+      // a coin rings with inharmonic partials; a fast decay keeps it small and close
+      this.tone(f, 0.18, v, 'sine', when, 0.001, pan);
+      this.tone(f * 2.76, 0.09, v * 0.5, 'sine', when, 0.001, pan);
+      this.noise(0.02, 'highpass', 5000, 1, v * 0.8, when, pan);
+    }
+  }
+
   clack(intensity = 1, pan = 0): void {
     if (!this.ok()) return;
     const now = performance.now();

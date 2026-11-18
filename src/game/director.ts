@@ -50,6 +50,7 @@ import { Palace } from './palace.js';
 import { TableDressing } from './tablecloth.js';
 import { SetDressing } from './props.js';
 import { GhostDemo, type GhostDemoKind } from './ghost/ghost-hand.js';
+import { GoldStakes, type Owner } from './stakes.js';
 
 /**
  * The game director: one IWSDK system that owns the match.
@@ -129,6 +130,24 @@ const CONTROLLER_LINES: Partial<Record<keyof typeof LINES, string>> = {
   hintFlip: 'Quick — tap a die with your controller tip to tip it over.',
 };
 
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen'];
+const spoken = (n: number) => {
+  const w = NUMBER_WORDS[n] ?? String(n);
+  return w[0].toUpperCase() + w.slice(1) + '.';
+};
+
+/**
+ * The legend of the dice. Popular retellings (not the critical edition of the
+ * Sabha Parva) say Shakuni's pasa were made from his father's bones and obeyed
+ * him: hence "the old tellings say".
+ */
+const X_AXIS = new Vector3(1, 0, 0);
+const LEGEND = [
+  'The old tellings say Shakuni carved these pasa from his own father\'s bones.',
+  'They fall as he wills. Tonight, you made him answer for it.',
+];
+
 const LINES = {
   intro: 'Welcome, Prince. Sit. The pasa are hungry.',
   rules: 'Throw, then move one piece. First piece into the centre wins.',
@@ -149,6 +168,7 @@ const LINES = {
   loIWon: 'Lo, I have won!',
   captureByS: 'Back to the start with you.',
   captureByP: 'A lucky throw. Nothing more.',
+  hintCall: 'He named the throw before the pasa stopped rolling…',
 };
 
 export class ChausarSystem extends createSystem({
@@ -216,7 +236,7 @@ export class ChausarSystem extends createSystem({
   private dwellT = 0;
   private readonly pieceLift = [[0, 0], [0, 0]];
   // take-back
-  private undo: { snap: GameState; values: number[]; piece: number } | null = null;
+  private undo: { snap: GameState; values: number[]; piece: number; gold?: number } | null = null;
   private takebackArmed = false;
   private takebackT = 0;
   private takebacksShown = 0;
@@ -260,12 +280,27 @@ export class ChausarSystem extends createSystem({
   private readonly headLocal = new Vector3();
   private readonly headWorld = new Vector3();
   private ghost!: GhostDemo;
+  private stakes!: GoldStakes;
+  /** the total Shakuni will call out while his loaded dice are still in the air */
+  private sCalled = 0;
+  /** the dice legend, once per visit, on the first time you catch him */
+  private legendShown = false;
+  private legend: { t: number; end: number; from: Vector3; touchCd: number; spin: number; angle: number } | null = null;
+  /** how this match was played, for the closing reflection */
+  private readonly match = { cheats: 0, caught: 0, sCheats: 0, sExposed: 0, sMissed: 0, wrong: 0 };
   /** demos left this match per cheat (refilled by the every-third-turn reminder) */
   private readonly ghostLeft: Record<GhostDemoKind, number> = { swap: 2, flip: 2 };
   private ghostShown: GhostDemoKind | null = null;
   private ghostPreview: 0 | 1 | 2 = 0;
   /** cheats and the gong the player has used this match (unused ones get their hint again) */
   private readonly used = new Set<'swap' | 'flip' | 'gong'>();
+
+  /** Sweep gold across the table, and say so in the dev log. */
+  private moveGold(to: Owner, n: number, why: string): number {
+    const moved = this.stakes.transfer(to, n);
+    if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} stakes ${why} → ${to === 0 ? 'you' : 'shakuni'} moved=${moved} you=${this.stakes.count(0)} shakuni=${this.stakes.count(1)}`);
+    return moved;
+  }
 
   /** The instruction for `key`, worded for hands or controllers. */
   private line(key: keyof typeof LINES): string {
@@ -315,6 +350,10 @@ export class ChausarSystem extends createSystem({
     };
     this.fx = new Fx();
     this.anchor.add(this.fx.group);
+    // the wager, in gold, on the right-hand margin of the table
+    this.stakes = new GoldStakes();
+    this.stakes.onLand = (owner) => sfx.coins(8, owner === 0 ? 0.4 : 0.6);
+    this.anchor.add(this.stakes.mesh);
     // the ghost hand that shows each cheat the first times it becomes possible
     this.ghost = new GhostDemo();
     this.anchor.add(this.ghost.root);
@@ -502,6 +541,8 @@ export class ChausarSystem extends createSystem({
     this.state = newGame();
     this.used.clear();
     this.ghostLeft.swap = this.ghostLeft.flip = 2;
+    this.stakes?.reset();
+    Object.assign(this.match, { cheats: 0, caught: 0, sCheats: 0, sExposed: 0, sMissed: 0, wrong: 0 });
     this.skipNextThrow = false;
     this.sTurnCount = 0;
     this.shakuni.suspicion = 20;
@@ -601,7 +642,7 @@ export class ChausarSystem extends createSystem({
       case 's_throw': this.updateSThrow(dt); break;
       case 's_flying': this.updateSFlying(); break;
       case 's_reveal': this.updateSReveal(); break;
-      case 'accused': this.updateAccused(); break;
+      case 'accused': this.updateAccused(dt); break;
       case 'handoff': this.updateHandoff(); break;
       case 'gameover': this.updateGameOver(); break;
       default: break;
@@ -610,6 +651,8 @@ export class ChausarSystem extends createSystem({
     this.updateGong(dt);
     this.updateWave(dt);
     this.updateGhost(dt, time);
+    this.stakes.update(dt);
+    if (this.stakes.moving) this.shadows.requestShadowUpdate(1);
     this.updateHop(dt);
     this.updatePieces(dt);
     this.dice.update(dt);
@@ -706,6 +749,10 @@ export class ChausarSystem extends createSystem({
       if (this.keys.has('v')) this.finish(0);
       // review cameras: c cycles face close-up / seated body / side profile / set / off
       if (this.keys.has('c')) this.devCam = (this.devCam + 1) % 5;
+      // 5 / 6 = a stack of gold to Shakuni / to you; 7 = play the dice legend now
+      if (this.keys.has('5')) this.moveGold(1, 1, 'dev');
+      if (this.keys.has('6')) this.moveGold(0, 1, 'dev');
+      if (this.keys.has('7')) { this.beginLegend(); this.setPhase('accused'); }
       // 8 = pin the ghost-hand demo for review: swap → flip → off
       if (this.keys.has('8')) this.ghostPreview = ((this.ghostPreview + 1) % 3) as 0 | 1 | 2;
       if (this.keys.has('b')) this.shakuni.strokeBeard();
@@ -1241,6 +1288,8 @@ export class ChausarSystem extends createSystem({
     }
     if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} resolve acts=${JSON.stringify(this.acts)} loaded=${this.loaded} suspicion=${this.shakuni.suspicion} caught=${caught}`);
     if (caught) {
+      this.match.caught++;
+      this.moveGold(1, 1, 'you were caught');
       this.ledger.timesCaught++;
       saveLedger(this.ledger);
       this.say('', seen ? LINES.caughtSeen : LINES.caughtLuck, false, true, 4);
@@ -1263,6 +1312,7 @@ export class ChausarSystem extends createSystem({
       return;
     }
     if (this.acts.length) {
+      this.match.cheats++;
       this.ledger.cheatsLanded++;
       saveLedger(this.ledger);
     }
@@ -1290,6 +1340,7 @@ export class ChausarSystem extends createSystem({
 
   private beginChoose(seat: Seat, values: number[]): void {
     this.undo = null; // only a move you chose between options can be taken back
+    if (seat === 1 && this.sCheat) this.match.sMissed++;
     this.options = legalMoves(this.state, seat, rollTotal(values));
     if (this.options.length === 1 || seat === 1) {
       const m = seat === 1 ? bestMove(this.state, 1, rollTotal(values)) : this.options[0];
@@ -1430,6 +1481,7 @@ export class ChausarSystem extends createSystem({
       sfx.whoosh();
       piece.setGlow(0);
       this.state = cloneState(u.snap);
+      if (u.gold) this.moveGold(1, u.gold, 'take-back');
       this.undo = null;
       this.layoutPieces(false); // pieces (and anything captured) drift back
       this.say('', 'Change of heart, Prince? Choose again.', false, true, 2.5);
@@ -1464,6 +1516,9 @@ export class ChausarSystem extends createSystem({
         const res = applyMove(this.state, m, faces);
         this.layoutPieces(false);
         if (m.captures.length) {
+          // the captor sweeps a stack of gold across the table (a take-back sweeps it home again)
+          const moved = this.moveGold(m.seat as Owner, 1, 'capture');
+          if (m.seat === 0 && this.undo) this.undo.gold = moved;
           sfx.thud(1);
           sfx.sinister();
           const at = this.tA.copy(this.board.pieces[m.seat][m.piece].mesh.position);
@@ -1597,6 +1652,7 @@ export class ChausarSystem extends createSystem({
     }
     this.shakuni.cycling = false;
     this.accuseOpen = false;
+    this.sCalled = 0;
     this.setPhase('s_throw');
   }
 
@@ -1654,9 +1710,11 @@ export class ChausarSystem extends createSystem({
       target.x += (Math.random() - 0.5) * 0.04;
       target.z += -0.04 + (Math.random() - 0.5) * 0.04; // land short; they roll toward you
       const v = this.ballistic(this.tB, target, 0.4);
-      const forced = this.sCheat
-        ? loadedThrow(this.state, 1).map((f) => PASA_FACES.indexOf(f as 1))
-        : null;
+      const loadedFaces = this.sCheat ? loadedThrow(this.state, 1) : null;
+      const forced = loadedFaces ? loadedFaces.map((f) => PASA_FACES.indexOf(f as 1)) : null;
+      // the second tell: he knows the total before the dice stop (always on his scripted first cheat)
+      this.sCalled = loadedFaces && (this.sTurnCount === 2 || Math.random() < 0.75) ? rollTotal(loadedFaces) : 0;
+      if (this.sCheat) this.match.sCheats++;
       this.dice.release(v, 16, forced);
       sfx.whoosh();
       s.setGrip(0);
@@ -1668,6 +1726,10 @@ export class ChausarSystem extends createSystem({
   }
 
   private updateSFlying(): void {
+    if (this.sCalled && this.phaseT > 0.3 && this.once('call')) {
+      if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} shakuni calls ${this.sCalled} early`);
+      this.say('', spoken(this.sCalled), false, true, 1.6);
+    }
     if (this.dice.allRest || this.phaseT > 4) {
       this.throwValues = this.dice.values;
       this.setPhase('s_reveal');
@@ -1677,6 +1739,9 @@ export class ChausarSystem extends createSystem({
   private updateSReveal(): void {
     const v = this.throwValues;
     this.showTotal(v);
+    // honest throws: sometimes he names the total, but only once it has landed
+    if (!this.sCheat && this.phaseT > 0.35 && this.once('callAfter') && Math.random() < 0.4) this.say('', spoken(rollTotal(v)), false, true, 1.4);
+    if (this.sCheat && this.sCalled && this.sTurnCount > 2 && this.phaseT > 0.9 && !this.shown.has('hintCall')) this.say('hintCall', LINES.hintCall, true);
     if (this.phaseT > 1.3) this.beginChoose(1, v);
   }
 
@@ -1826,6 +1891,9 @@ export class ChausarSystem extends createSystem({
       this.shakuni.angerT = 3;
       this.ledger.shakuniCaught++;
       saveLedger(this.ledger);
+      this.match.sExposed++;
+      this.moveGold(0, 1, 'shakuni exposed');
+      if (!this.legendShown) this.beginLegend();
       this.shakuni.setGrip(0);
       this.shakuni.handTarget.copy(SHAKUNI_HAND_REST);
       this.say('', LINES.accusedRight, false, true, 4);
@@ -1834,6 +1902,7 @@ export class ChausarSystem extends createSystem({
       return;
     }
     // Wrong: he laughs and you lose a throw.
+    this.match.wrong++;
     this.shakuni.laughT = 2;
     sfx.sinister();
     this.say('', LINES.accusedWrong, false, true, 4);
@@ -1847,7 +1916,86 @@ export class ChausarSystem extends createSystem({
     }
   }
 
-  private updateAccused(): void {
+  private beginLegend(): void {
+    this.legendShown = true;
+    this.legend = { t: 0, end: 0, from: new Vector3(), touchCd: 0, spin: 0, angle: 0 };
+  }
+
+  /**
+   * The first time you catch him: his dice rise in front of you, within reach and
+   * below the subtitles (never moving the view), grow to 1.5× and turn on their own
+   * long axes in violet light while the legend is told. Touch one and it spins and rings.
+   */
+  private updateLegend(dt: number): void {
+    const L = this.legend!;
+    L.t += dt;
+    const busy = this.dice.dice.some((d) => d.mode === 'flying' || d.mode === 'settling');
+    if (!L.end) {
+      if (L.t < 1.6 || (busy && L.t < 3.5)) return; // the crack and the light play first
+      L.from.set(0, 0, 0);
+      for (const d of this.dice.dice) L.from.addScaledVector(d.pos, 1 / 3);
+      // one passage: a second narrator line would replace the first (Subtitles keeps only the newest)
+      const dur = this.subs.say(LEGEND.join(' '), 'narrator');
+      L.t = 0.001; // from here, t counts the float itself
+      L.end = Math.max(7, dur) + 0.6;
+      sfx.sparkle();
+      if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} legend`);
+      return;
+    }
+    const k = Math.min(1, L.t / 1.3);
+    const e = k * k * (3 - 2 * k);
+    // about 0.43 m away, below and to the right of the captions: in easy reach, like something held up to you
+    const target = this.tA.copy(this.headLocal).add(this.tB.set(0.12, -0.24, -0.34));
+    target.y = Math.max(target.y, SURFACE_Y + 0.14);
+    const at = this.tC.lerpVectors(L.from, target, e);
+    at.y += Math.sin(this.time * 1.4) * 0.004 * e + Math.sin(Math.PI * e) * 0.04;
+    L.spin = Math.max(0, L.spin - dt * 1.2);
+    L.angle += dt * (0.45 + 7 * L.spin);
+    // three bars stacked one above another, each turning on its long axis: every face shows in turn
+    const out = Math.min(1, Math.max(0, (L.t - (L.end - 0.6)) / 0.6)); // shrink back before they go home
+    const sc = 1 + 0.5 * e * (1 - out * out * (3 - 2 * out));
+    this.dice.dice.forEach((d, i) => {
+      d.mode = 'held';
+      d.pos.copy(at);
+      d.pos.y += (1 - i) * 0.03 * sc;
+      d.quat.setFromAxisAngle(X_AXIS, L.angle + i * 0.9);
+      d.mesh.scale.setScalar(sc);
+      d.sync();
+    });
+    // the violet of his cheating dice, breathing: the same light you saw when he loaded them
+    const glow = 0.55 + 0.2 * Math.sin(this.time * 2.4) + 0.7 * L.spin;
+    this.dice.dice.forEach((d) => d.setGlow(glow, '#a97cff'));
+    this.shakuni.lookTarget.copy(at);
+    // touch a die: it spins and rings
+    L.touchCd -= dt;
+    if (L.touchCd <= 0 && e > 0.9) {
+      for (const h of this.hands.both) {
+        if (!h.tracked) continue;
+        const tip = this.toLocal(h.indexTip, this.tB);
+        if (this.dice.dice.some((d) => d.pos.distanceTo(tip) < 0.035)) {
+          L.spin = 1;
+          L.touchCd = 0.45;
+          sfx.tap(0, 1.9);
+          sfx.sparkle();
+          h.buzz(0.4, 30);
+          break;
+        }
+      }
+    }
+    if (L.t > L.end) {
+      this.legend = null;
+      this.dice.dice.forEach((d) => {
+        d.setGlow(0);
+        d.mesh.scale.setScalar(1);
+      });
+    }
+  }
+
+  private updateAccused(dt: number): void {
+    if (this.legend) {
+      this.updateLegend(dt);
+      return;
+    }
     if (this.phaseT < 3.2) return;
     if (this.dice.dice.some((d) => d.mode === 'flying' || d.mode === 'settling')) return;
     this.dice.dice.forEach((d) => d.setGlow(0));
@@ -1858,6 +2006,7 @@ export class ChausarSystem extends createSystem({
 
   private finish(winner: Seat): void {
     this.setPhase('gameover');
+    this.moveGold(winner as Owner, 8, 'match');
     this.resultLine = recordMatch(this.ledger, winner === 0);
     this.accuseOpen = false;
     this.shakuni.cycling = false;
@@ -1882,8 +2031,27 @@ export class ChausarSystem extends createSystem({
 
   private resultLine = '';
 
+  /** The question the epic leaves you with, shaped by how this match was played. */
+  private reflection(playerWon: boolean): string {
+    const m = this.match;
+    if (playerWon && m.cheats > 0 && m.cheats >= m.sCheats) return 'You beat a cheat by cheating. Who was the fairer player tonight?';
+    if (playerWon && m.cheats === 0) return 'You won with honest throws, against dice that obey him. Some would call that dharma.';
+    if (playerWon) return 'You won, and you know how. The court will tell it differently.';
+    if (m.sMissed > 0) {
+      const n = m.sMissed === 1 ? 'once' : m.sMissed === 2 ? 'twice' : `${m.sMissed} times`;
+      return `He cheated ${n} and no one struck the gong. In the epic, Vidura warned them, and the elders kept silent.`;
+    }
+    if (m.sExposed > 0) return 'You exposed him, and still the game went on. So it did in the Sabha Parva.';
+    return 'A game decided before it began. The epic asks why the court stayed silent.';
+  }
+
   private updateGameOver(): void {
     if (this.phaseT > 5 && this.once('result')) this.say('', this.resultLine, false, true, 6);
+    if (this.phaseT > 11.5 && this.once('reflect')) {
+      const line = this.reflection(this.state.winner === 0);
+      if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} reflection ${JSON.stringify(this.match)} "${line}"`);
+      this.say('', line, false, false, 7);
+    }
     this.ledgerLabel.setText(ledgerLine(this.ledger));
     this.ledgerLabel.opacity = Math.min(1, Math.max(0, this.phaseT - 5));
   }

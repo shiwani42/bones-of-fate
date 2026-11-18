@@ -258,6 +258,7 @@ Make Shakuni's eyes `lookAt` your dice hand so "he's watching" reads instantly.
 | "Mahabharata The Game" (skich.app) | Mobile | Has the Shakuni dice story; **not XR** |
 | Ludii Chaupar / Pachisi / Aksadyuta | Desktop research software | Rules engines; no XR |
 | GitHub pachisi repos (ljiang9, bsingr, …) | 2D / CLI | No XR. No chaupar/chausar WebXR repo exists. |
+| [Dhayam VR](https://fau.isle.flvc.org/node/70332) (M. Ramachendran Selvaraj, FAU M.F.A. thesis, 2020) | VR research project | The closest academic precedent: Dhayam, a Tamil roll-and-move board game, adapted to VR and inspired by the Mahabharata, as an educative experience. Fully virtual; no mixed reality, no hand-tracked throws, no cheating mechanic. |
 
 **Verdict:** I found no chausar, pachisi or "game of dice" project in VR, AR or WebXR (GitHub, web, store searches). Ours is the only one with all of:
 - hands-only physical pasa throws;
@@ -267,6 +268,19 @@ Make Shakuni's eyes `lookAt` your dice hand so "he's watching" reads instantly.
 - story grounded in a public-domain text.
 
 ---
+
+## 6. Concept review (18 Nov): "The Game of Destiny"
+A concept note proposed five scenes. The central question it asks fits Chausar exactly: **what happens when you enter a game whose outcome has already been decided, but you don't know it?** Chausar is its direction B (play Shakuni's dice yourself, discover the rigging, expose it). What came of each scene:
+
+| Scene in the note | In Chausar |
+|---|---|
+| 1. Enter the royal court (Pandavas, Duryodhana, Shakuni) | The hall dome, pillars, arch and lamps rise around your real table; Shakuni sits opposite. The other characters are **not** built: realistic humans at Shakuni's quality would take days each and would turn the table-top MR game into a full-VR scene. |
+| 2. Pick up and roll the dice | The core verb: a real pinch, shake and throw. |
+| 3. The mystery of Shakuni's dice | **Two tells:** his hand dips below the table before a loaded throw, and he **names the total while the dice are still in the air** (on three loaded throws in four, and always on his scripted first cheat; honest totals he names only after they land, if at all). **Inspection:** the first time you catch him (per visit), his dice rise in front of you, grow and turn in violet light while the legend is told as legend ("the old tellings say…"); touch one and it spins and rings. |
+| 4. Consequences: the court changes as you lose | **Your stake in gold on the table:** eight stacks of mohurs on the right-hand margin, half each. A capture sweeps a stack to the captor, getting caught costs you one, catching him wins one, and the winner takes all that's left. Between sessions the stakes still climb (gold → kingdom). |
+| 5. The moral dilemma | **A closing reflection** chosen by how you played: beat a cheat by cheating ("who was the fairer player?"), won honestly ("some would call that dharma"), or let his cheats pass ("Vidura warned them, and the elders kept silent"). |
+
+Accuracy notes kept in the lines: the bones legend is framed as legend (1b); Vidura did object in the Sabha Parva (Ganguli §LXV onward), and Draupadi's humiliation is still not depicted.
 
 ## Top 10 actionable takeaways
 1. **Ship Dyuta-5:** 2 pieces each, a 51-square anticlockwise route on the outer loop, a sum of 3 pasa (1/2/5/6) moving one piece, castles, captures, jod, a triples bonus, and a 10-round gong cap (fixed demo length).
