@@ -1,8 +1,10 @@
-# Chausar: The Game of Dice
+# Bones of Fate
+
+*A game of chausar against Shakuni, on your real table.*
 
 **Mixed reality · hands only · seated · Meta Quest Browser (WebXR)**
 
-**Play:** open **https://chausar-zeta.vercel.app** in Quest Browser on a Quest 3 or 3S, then tap *Enter XR*.
+**Play:** open **https://bones-of-fate.vercel.app** in Quest Browser on a Quest 3 or 3S, then tap *Enter XR*.
 
 A carved chausar board rises out of your real table. Across it sits the spirit of **Shakuni**, the most famous dice cheat of the Mahabharata. You throw the long *pasa* dice with a real throw of your hand and move your pieces with a pinch.
 
@@ -58,7 +60,7 @@ npm run dev            # HTTPS dev server + emulator on https://localhost:8082
 npm run typecheck && npm run build
 ```
 
-- **Port 8082** (not the scaffold's 8081), so Chausar can run alongside the other projects' dev servers.
+- **Port 8082** (not the scaffold's 8081), so Bones of Fate can run alongside the other projects' dev servers.
 - **Quest over USB from Linux:** `adb reverse tcp:8082 tcp:8082`, then open `https://localhost:8082` in Quest Browser.
 - **Desktop keys** (browser preview and emulator):
   - `Space` throw, `U` load the dice, `F` flip a die, `1`/`2` pick a piece, `G` gong, `N` new game, `M` mute.

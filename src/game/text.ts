@@ -37,9 +37,9 @@ export function loadFonts(): Promise<void> {
       });
       await Promise.race([
         Promise.all([
-          document.fonts.load(`64px 'Tiro Devanagari Hindi'`, 'चौसर Chausar'),
-          document.fonts.load(`64px 'Rozha One'`, 'चौसर Chausar'),
-          document.fonts.load(`600 64px 'Mukta'`, 'चौसर Chausar'),
+          document.fonts.load(`64px 'Tiro Devanagari Hindi'`, 'चौसर Bones of Fate'),
+          document.fonts.load(`64px 'Rozha One'`, 'चौसर Bones of Fate'),
+          document.fonts.load(`600 64px 'Mukta'`, 'चौसर Bones of Fate'),
           document.fonts.load(`700 64px 'Mukta'`, 'SHAKUNI'),
         ]),
         new Promise((r) => setTimeout(r, 2500)),

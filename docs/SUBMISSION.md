@@ -7,11 +7,11 @@ Deadline: **Wed 18 Nov 2026, 12:00 PM PST = Thu 19 Nov, 1:30 AM IST.** Submit se
 - **Submitter:** must be a person who isn't submitting another project (one entry per person).
 
 ## Title and tagline
-**Chausar: The Game of Dice.** Cheat Shakuni at his own game, with your bare hands, on your real table.
+**Bones of Fate.** Cheat Shakuni at his own game, with your bare hands, on your real table.
 
 ## Description (paste-ready)
 
-> In the Mahabharata, a game of dice decided the fate of a kingdom, and Shakuni won it by cheating. **Chausar** puts that game on your real table.
+> In the Mahabharata, a game of dice decided the fate of a kingdom, and Shakuni won it by cheating. **Bones of Fate** puts that game on your real table.
 >
 > A carved, embroidered chausar board rises out of your table in passthrough. Across it sits Shakuni's spirit. You play with your hands only: pinch the long bone *pasa*, shake them, and open your fingers to throw. Pinch a piece to move it.
 >
@@ -59,7 +59,7 @@ Record on Windows with MQDH casting, or with the headset's own recorder.
 
 | Time | Shot | Point it makes |
 |---|---|---|
-| 0:00–0:08 | Over-the-shoulder: an empty real table. The gold cross snaps onto it, the board **rises**, Shakuni fades in. Title card "चौसर · Chausar". | Hook: the room is the stage |
+| 0:00–0:08 | Over-the-shoulder: an empty real table. The gold cross snaps onto it, the board **rises**, Shakuni fades in. Title card "Bones of Fate · चौसर". | Hook: the room is the stage |
 | 0:08–0:25 | Pinch the pasa, shake (rattle), throw; the dice bounce and topple; "5 + 6 + 6 = 17". Pinch a piece; it hops. | Hands-first, seated, no controllers |
 | 0:25–0:45 | Shakuni's eyes go dim and he turns away. Lower the dice **under the real table edge**, golden glint, throw. The perfect roll. | The core idea in one shot |
 | 0:45–1:05 | Try again while he's watching: red eyes, "CHEAT!", **board cracks, light pillars**, true roll revealed. | The awe moment |

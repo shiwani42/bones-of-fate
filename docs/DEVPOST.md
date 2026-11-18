@@ -6,7 +6,7 @@ The Mahabharata's rigged dice game, on your real table. Throw Shakuni's dice wit
 
 ## Try it out
 
-https://chausar-zeta.vercel.app (open in Quest Browser on Quest 3 or 3S)
+https://bones-of-fate.vercel.app (open in Quest Browser on Quest 3 or 3S)
 
 https://github.com/shiwani42/chausar
 

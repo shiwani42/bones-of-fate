@@ -585,7 +585,7 @@ export class ChausarSystem extends createSystem({
   }
 
   private refreshTitle(): void {
-    this.title.setText('चौसर · Chausar');
+    this.title.setText('Bones of Fate · चौसर');
   }
 
   /** Show a caption (or whisper) for a few seconds. `once` keys show only once per session. */
