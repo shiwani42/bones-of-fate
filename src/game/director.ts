@@ -40,6 +40,7 @@ import {
   passTurn,
   rollTotal,
   Seat,
+  setBack,
   START,
 } from './rules.js';
 import { Ledger, ledgerLine, loadLedger, recordMatch, saveLedger, stakeName } from './save.js';
@@ -163,6 +164,8 @@ const LINES = {
   caughtSeen: 'CHEAT! I saw that hand, Prince!',
   caughtLuck: 'Such luck… no one is that lucky. CHEAT!',
   shakuniWin: 'Lo, I have won! Your kingdom is mine.',
+  brokeYou: 'Your gold is gone. Like Yudhishthira, you have nothing left to wager.',
+  brokeHim: 'His gold is gone. Shakuni has nothing left to wager. The court is yours.',
   playerWin: 'Your piece reaches the centre. The kingdom is yours again!',
   accusedRight: 'Impossible! The light… betrays me.',
   accusedWrong: 'You accuse me without cause? You lose your next throw.',
@@ -281,6 +284,9 @@ export class ChausarSystem extends createSystem({
   private readonly headLocal = new Vector3();
   private readonly headWorld = new Vector3();
   private ghost!: GhostDemo;
+  /** dev, trailer recording: hide hint cards and subtitles; force his next throw to cheat */
+  private cinematic = false;
+  private forceCheat = false;
   /** every asset the entrance needs has loaded (or the wait timed out) */
   private courtReady = false;
   private courtDone = 0;
@@ -784,6 +790,9 @@ export class ChausarSystem extends createSystem({
       if (this.keys.has('v')) this.finish(0);
       // review cameras: c cycles face close-up / seated body / side profile / set / off
       if (this.keys.has('c')) this.devCam = (this.devCam + 1) % 5;
+      // trailer: 9 = clean frame (no hint cards or subtitles), 0 = his next throw is loaded
+      if (this.keys.has('9')) this.cinematic = !this.cinematic;
+      if (this.keys.has('0')) this.forceCheat = true;
       // 5 / 6 = a stack of gold to Shakuni / to you; 7 = play the dice legend now
       if (this.keys.has('5')) this.moveGold(1, 1, 'dev');
       if (this.keys.has('6')) this.moveGold(0, 1, 'dev');
@@ -1347,9 +1356,9 @@ export class ChausarSystem extends createSystem({
         d.beginSettle();
         d.setGlow(1.2, '#fff2c0');
       });
-      // penalty: your leading piece goes back to the start
+      // penalty: your leading piece falls back (not all the way: matches must end)
       const lead = leadingPiece(this.state, 0);
-      if (this.state.pos[0][lead] !== START) this.state.pos[0][lead] = START;
+      this.state.pos[0][lead] = setBack(this.state.pos[0][lead]);
       this.shakuni.suspicion = 35;
       this.ambience.setMood('tense');
       this.ambience.flare(0.8);
@@ -1659,6 +1668,13 @@ export class ChausarSystem extends createSystem({
   private updateHandoff(): void {
     if (this.phaseT < 0.7) return;
     if (this.state.winner !== null) return;
+    // the wager is the second way to end a match: whoever has no gold left has lost
+    // (counts change at once; wait for the last stack to land before calling it)
+    const broke: Seat | null = this.stakes.count(0) === 0 ? 0 : this.stakes.count(1) === 0 ? 1 : null;
+    if (broke !== null) {
+      if (!this.stakes.moving) this.finish(broke === 0 ? 1 : 0, 'gold');
+      return;
+    }
     if (this.state.turn === 0) {
       // the dice come back to you
       if (this.once('slide')) {
@@ -1684,7 +1700,8 @@ export class ChausarSystem extends createSystem({
     this.sSnapshot = cloneState(this.state);
     const behind = this.progress(1) < this.progress(0);
     // His 2nd throw always cheats so the player learns the tell early.
-    this.sCheat = this.sTurnCount === 2 || (this.sTurnCount > 2 && Math.random() < (behind ? 0.45 : 0.28));
+    this.sCheat = this.forceCheat || this.sTurnCount === 2 || (this.sTurnCount > 2 && Math.random() < (behind ? 0.45 : 0.28));
+    this.forceCheat = false;
     this.sThrowAt = this.sCheat ? 2.9 : 1.9;
     // dice out of his reach slide across the cloth to him (they obey Shakuni)
     let cx = 0, cz = 0;
@@ -1924,7 +1941,7 @@ export class ChausarSystem extends createSystem({
       this.hop = null;
       if (this.sSnapshot) this.state = cloneState(this.sSnapshot);
       const lead = leadingPiece(this.state, 1);
-      this.state.pos[1][lead] = START;
+      this.state.pos[1][lead] = setBack(this.state.pos[1][lead]);
       this.state.turn = 0;
       this.state.winner = null;
       this.sCheat = false;
@@ -2049,14 +2066,16 @@ export class ChausarSystem extends createSystem({
 
   // ───────────────────────── end ─────────────────────────
 
-  private finish(winner: Seat): void {
+  private finish(winner: Seat, how: 'race' | 'gold' = 'race'): void {
+    this.state.winner = winner;
     this.setPhase('gameover');
+    if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} match over winner=${winner} by ${how}`);
     this.moveGold(winner as Owner, 8, 'match');
     this.resultLine = recordMatch(this.ledger, winner === 0);
     this.accuseOpen = false;
     this.shakuni.cycling = false;
     if (winner === 0) {
-      this.say('', LINES.playerWin, false, true, 8);
+      this.say('', how === 'gold' ? LINES.brokeHim : LINES.playerWin, false, true, 8);
       sfx.conch();
       this.fx.petalShower();
       this.juice.reward(this.tA.set(0, SURFACE_Y, 0), 4);
@@ -2066,7 +2085,7 @@ export class ChausarSystem extends createSystem({
       sfx.dim(false);
       this.shakuni.angerT = 2;
     } else {
-      this.say('', LINES.shakuniWin, false, true, 8);
+      this.say('', how === 'gold' ? LINES.brokeYou : LINES.shakuniWin, false, true, 8);
       sfx.sinister();
       this.shakuni.laughT = 3;
       this.ambience.setMood('tense');
@@ -2128,6 +2147,10 @@ export class ChausarSystem extends createSystem({
     this.whisper.opacity = 0;
     this.subs.update(dt, this.immersive ? this.player.head : this.camera);
     this.hint.update(dt, this.headLocal);
+    if (import.meta.env.DEV) {
+      this.subs.group.visible = !this.cinematic;
+      this.hint.label.mesh.visible = !this.cinematic;
+    }
     for (const l of [this.caption, this.whisper, this.title, this.totalLabel, this.gongLabel]) {
       if (l.mesh.visible) this.billboard(l.mesh);
     }

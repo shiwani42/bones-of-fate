@@ -95,6 +95,17 @@ Found by filming a first visit (no cache, 8 Mbit/s) of the live site with `tools
 - **White in the beard, moustache and brows:** the strand cards reflected the bright palace IBL. Hair is now matte (roughness 0.88, reflections at 0.2) and the beard darker; skin, robe and turban reflections are halved, which also fixed pale ears.
 - **A grey wedge between neck and collar:** the inside of the robe was lit like the outside. Garment back faces are now shaded dark.
 
+### Match length fix (19 Nov)
+**Reported:** "The game just doesn't go in a way to end; things keep repeating."
+**Cause:** the pure rules end in about 17 throws, but two penalties sent a piece all the way back to the start: your leading piece when you're caught cheating, and his leading piece (plus his undone turn) when you catch him. He cheats on 28–45% of his turns and has two obvious tells, and a cheating player gets caught often, so progress kept being wiped and matches looped.
+**Fix:**
+- Both penalties now set the leading piece back 12 squares (`PENALTY_SQUARES`, `setBack()` in `src/game/rules.ts`), to the start only if it was that close.
+- The gold is a second way to end a match: at the turn handoff, once the last stack has landed, a side with no gold left loses (`finish(winner, 'gold')`, with its own closing line). Every gold movement (capture, caught, exposing him, take-back) reaches the handoff before the next turn, and a take-back that returns the gold cancels the ending.
+- `finish()` now also sets `state.winner`, so the dev win key and the gold ending get the right closing reflection.
+- `scripts/sim-rules.ts` plays 1,000 whole matches per setting with his cheating, yours, catches and the gold. Heavy cheating on both sides (you catch 90% of his cheats, cheat on 60% of turns, get caught half the time): the old rules averaged about 52 throws, about 29% of matches ran past 60 and the worst ran past 300; now about 25 throws on average, 2% past 60, worst under 100, 40% ended by gold. Moderate cheating: about 21 → 18 throws.
+- New e2e scenario `scripts/e2e/xr_gold.py` (6 checks): empty your gold with dev key `5`, play one turn, the match ends `winner=1 by gold` mid-race with a reflection, and the gong restart deals the gold back out 4 and 4.
+- Full emulator suite after the fix (`npm run test:xr`, 19 Nov): **44/44** (core 15, cheats 11, hands 12, gold 6); typecheck, `npm test` and the build pass.
+
 ## 2. Must be checked on a real Quest (the emulator can't prove these)
 
 | # | Check | How |

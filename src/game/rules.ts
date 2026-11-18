@@ -172,6 +172,17 @@ export function passTurn(s: GameState): void {
   s.turn = (1 - s.turn) as Seat;
 }
 
+/**
+ * Penalties cost ground, not everything: sending a piece all the way back to
+ * the start made matches loop (he cheats often and is easy to catch; a cheating
+ * player gets caught often), so a catch sets the leading piece back this far.
+ */
+export const PENALTY_SQUARES = 12;
+
+/** Where a caught piece falls back to (the start only if it was that close to it). */
+export const setBack = (pos: number): number =>
+  pos === START || pos - PENALTY_SQUARES < 0 ? START : pos - PENALTY_SQUARES;
+
 /** Squares from `index` until home, for the leading-piece heuristics. */
 export const remaining = (index: number) =>
   index >= HOME ? 0 : HOME - Math.max(index, -1);

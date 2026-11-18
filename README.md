@@ -34,14 +34,14 @@ A carved chausar board rises out of your real table. Across it sits the spirit o
 | Move | If both pieces can move, **pinch** (or poke) the glowing piece. |
 | Cheat 1: the swap | While holding the dice, lower your hand **below the table edge** for half a second. The pasa come back loaded (best possible throw). |
 | Cheat 2: the nudge | After the throw, **poke** a die to tip it a quarter turn onto the next face. |
-| Accuse Shakuni | **Poke the gong** (near-left corner) after his throw. If he cheated, his side cracks and his turn is undone; if he didn't, you lose your next throw. |
+| Accuse Shakuni | **Poke the gong** (near-left corner) after his throw. If he cheated, his side cracks, his turn is undone and his leading piece falls back 12 squares; if he didn't, you lose your next throw. |
 | Move the board | **Pinch with both hands** for 1.5 s. |
 | Play again | Strike the gong after the match. |
 
 **Rules ("short chausar"):**
 - 3 pasa with faces 1, 2, 5 and 6; each throw moves one piece by the total.
 - 2 pieces each, which run one anticlockwise lap of the cross, then up your own middle column into the *char koni* (centre).
-- **First piece home wins.**
+- **First piece home wins**, or **bankrupt him**: whoever runs out of gold loses (see the wager below).
 - Landing on an enemy piece outside a castle square sends it back to start.
 - A capture or a triple earns another throw.
 
@@ -49,12 +49,12 @@ A carved chausar board rises out of your real table. Across it sits the spirit o
 - Red, blazing eyes mean he's watching.
 - When he turns to the court, his eyes dim to embers.
 - A flicker and a warning tone mean he's turning back.
-- Getting seen means you're caught.
+- Getting seen means you're caught: your throw is void and your leading piece falls back 12 squares.
 - Cheating unseen still raises his **suspicion** meter (under his chin). At high suspicion he can call it on luck alone.
 - His second throw always cheats, so every player learns his tells early. **Two tells:** his hand dips below the table before a loaded throw, and he usually **names the total while the dice are still in the air**. He only knows it because he rigged it.
 - **The first time you catch him**, his dice rise in front of you and the legend is told: the old tellings say they were carved from his father's bones. Touch one.
 
-**The wager is on the table:** eight stacks of gold mohurs beside the board, half each. A capture sweeps a stack to the captor; getting caught costs you one; catching him wins one; the winner takes the rest. The match ends with a closing reflection on how you played.
+**The wager is on the table:** eight stacks of gold mohurs beside the board, half each. A capture sweeps a stack to the captor; getting caught costs you one; catching him wins one. **A side with no gold left loses the match** (like Yudhishthira, with nothing left to wager); otherwise the first piece home wins and takes the rest. Caught pieces lose 12 squares rather than going back to the start, so cheating costs ground but matches always end. The match ends with a closing reflection on how you played.
 
 **Progress (saved in the browser):** each win raises the stake one step, following the Sabha Parva: a chest of gold → the royal chariot → a thousand elephants → the army → the treasury → the kingdom. The ledger shows wins, losses and how often you've caught him.
 
@@ -79,16 +79,17 @@ npm run typecheck && npm run build
 
 ```bash
 npm test               # rules + dice physics, headless (no browser)
-npx @iwsdk/cli dev up --ai-mode agent && npm run test:xr   # 38 XR checks with emulated hands
+npx @iwsdk/cli dev up --ai-mode agent && npm run test:xr   # 44 XR checks with emulated hands
 ```
 
 | Suite | What it proves |
 |---|---|
-| `scripts/sim-rules.ts` | The path is 75 squares with legal (incl. diagonal) steps. 2,000 AI-vs-AI games average about 17 throws, with balanced wins. Regression: a seat-0 win keeps the turn. |
+| `scripts/sim-rules.ts` | The path is 75 squares with legal (incl. diagonal) steps. 2,000 AI-vs-AI games average about 17 throws, with balanced wins. Whole matches with his cheating, your cheating, catches and the gold: the 12-square penalty plus the gold ending halves match length under heavy cheating (worst case under 100 throws, was over 300). Regression: a seat-0 win keeps the turn. |
 | `scripts/sim-dice.ts` | 300 hand throws: all settle (median 1.1 s), **forced faces are honoured 150/150** (loaded dice), and about 97% land fully in the throwing court. |
 | `scripts/e2e/xr_core.py` | Hands-only in IWER (`immersive-ar`, Quest 3 profile): table detection → pinch to place → pinch to skip the intro → pinch-pickup → throw → reveal → seen swap is caught → poking the gong catches Shakuni's scripted cheat → play resumes. |
 | `scripts/e2e/xr_cheats.py` | Unseen swap gets away; wrong accusation forfeits your throw; flip-poke registers; reaching the centre wins; striking the gong restarts. |
-| `scripts/e2e/xr_hands.py` | Hand-tracking guardrails: a lost hand doesn't throw the dice, a passing fingertip doesn't move a piece, take-back works, waving gets a reply. Ghost-hand demos, Shakuni's early call, the dice legend, gold changing hands and the closing reflection are checked in the other two. |
+| `scripts/e2e/xr_gold.py` | Running out of gold ends the match (Shakuni wins by gold) mid-race, with a closing reflection; the gong restart deals the gold back out 4 and 4. |
+| `scripts/e2e/xr_hands.py` | Hand-tracking guardrails: a lost hand doesn't throw the dice, a passing fingertip doesn't move a piece, take-back works, waving gets a reply. Ghost-hand demos, Shakuni's early call, the dice legend, gold changing hands and the closing reflection are checked in the other suites. |
 
 `test:xr` calls `python3`. On Windows run `python scripts/e2e/run_all.py`.
 

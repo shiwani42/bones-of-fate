@@ -52,3 +52,4 @@ tools/polyhaven/raw/
 tools/freegen/out/*.glb
 .vercel
 .env*
+artifacts/
