@@ -8,7 +8,7 @@ The Mahabharata's rigged dice game, on your real table. Throw Shakuni's dice wit
 
 https://bones-of-fate.vercel.app (open in Quest Browser on Quest 3 or 3S)
 
-https://github.com/shiwani42/chausar
+https://github.com/shiwani42/bones-of-fate
 
 ## Built with
 
