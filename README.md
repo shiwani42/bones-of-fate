@@ -6,6 +6,15 @@
 
 **Play:** open **https://bones-of-fate.vercel.app** in Quest Browser on a Quest 3 or 3S, then tap *Enter XR*.
 
+![Your real table becomes the dice hall of Hastinapur, with Shakuni across the board](docs/gallery/1-the-board.jpg)
+
+| | |
+|---|---|
+| ![A ghost hand shows the swap while Shakuni looks away](docs/gallery/2-ghost-hand-shows-the-swap.jpg) | ![Caught: your side of the board cracks open](docs/gallery/3-caught-the-crack.jpg) |
+| ![His dice rise to be inspected while the legend is told](docs/gallery/4-the-dice-legend.jpg) | ![Win, and the court melts back into your own room](docs/gallery/7-victory-your-room-returns.jpg) |
+
+*Screenshots from the IWSDK emulator (`tools/gallery/shoot.py`).*
+
 A carved chausar board rises out of your real table. Across it sits the spirit of **Shakuni**, the most famous dice cheat of the Mahabharata. You throw the long *pasa* dice with a real throw of your hand and move your pieces with a pinch.
 
 **Cheating is the game.** While Shakuni looks away, lower the dice beneath your real table's edge to swap in loaded ones, or poke a settled die to tip it onto a better face. If his blazing eyes catch you, your side of the board cracks open and divine light reveals the true roll. He cheats too: watch his ghostly hand. If it dips below the table, strike the gong to accuse him.

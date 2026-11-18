@@ -72,10 +72,10 @@
 <Panel class="panel-root">
   <div class="panel-content">
     <div class="eyebrow">MIXED REALITY  |  HANDS ONLY</div>
-    <div class="heading">Chausar: The Game of Dice</div>
+    <div class="heading">Bones of Fate</div>
     <div class="body">Sit at a table. Throw the pasa against Shakuni.</div>
     <div class="body">Cheat when he looks away. Catch him when he does.</div>
-    <div class="credits">Hands only, seated: put the board on a real table. All art and sound are procedural. Fonts: Rozha One, Tiro Devanagari Hindi (SIL OFL). Story lines adapted from K. M. Ganguli's public-domain Mahabharata.</div>
+    <div class="credits">Hands only, seated: put the board on a real table. Shakuni from MakeHuman (CC0), hall and props made with FLUX and TRELLIS, all sound synthesised. Fonts: Rozha One, Tiro Devanagari Hindi (SIL OFL). Story lines adapted from K. M. Ganguli's public-domain Mahabharata.</div>
   </div>
   <Button id="xr-button" class="button">
     <ButtonIcon>
