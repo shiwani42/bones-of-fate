@@ -17,6 +17,8 @@ import {
  * matters to the cheat). It is revealed as Shakuni materialises.
  */
 export class Palace {
+  /** resolves once the hall's texture is on the GPU-side material (or failed) */
+  ready: Promise<void> = Promise.resolve();
   readonly mesh: Mesh;
   private mat: ShaderMaterial;
   private reveal = 0;
@@ -60,11 +62,14 @@ export class Palace {
     this.mesh.renderOrder = -60;
     this.mesh.frustumCulled = false;
     this.mesh.visible = false;
-    new TextureLoader().load(url, (t) => {
-      t.colorSpace = SRGBColorSpace;
-      t.anisotropy = 4;
-      this.mat.uniforms.uMap.value = t;
-    });
+    this.ready = new TextureLoader()
+      .loadAsync(url)
+      .then((t) => {
+        t.colorSpace = SRGBColorSpace;
+        t.anisotropy = 4;
+        this.mat.uniforms.uMap.value = t;
+      })
+      .catch(() => {});
   }
 
   /** 1 = palace, 0 = your room. */

@@ -89,6 +89,12 @@ From a concept note on the Dyuta Sabha (see `docs/RESEARCH.md` §6). Tested in `
 | Muse Code, Odders Lab site, Store page | Nothing to apply (a coding agent, a company page, a JavaScript-only store page). |
 | YouTube interview | Transcript not fetched (the downloader was blocked); the article is its edited write-up. |
 
+### First-visit and close-up pass (18 Nov)
+Found by filming a first visit (no cache, 8 Mbit/s) of the live site with `tools/gallery/loadfilm.mjs`, and by face close-ups (dev key `C`).
+- **Things arrived one by one, mid-show:** a blank white page for about 6 s; the board in a grey void; black gong and brass (no reflections until the palace IBL loaded); the purple stand-in Shakuni for several seconds; palace and props popping in; then the real Shakuni. Now an HTML loading screen shows from the first moment, and the entrance waits for Shakuni with his turban, the hall texture, its reflections, the props and the fonts (`courtReady`, capped at 30 s). The stand-in bust appears only if the real model fails to load.
+- **White in the beard, moustache and brows:** the strand cards reflected the bright palace IBL. Hair is now matte (roughness 0.88, reflections at 0.2) and the beard darker; skin, robe and turban reflections are halved, which also fixed pale ears.
+- **A grey wedge between neck and collar:** the inside of the robe was lit like the outside. Garment back faces are now shaded dark.
+
 ## 2. Must be checked on a real Quest (the emulator can't prove these)
 
 | # | Check | How |

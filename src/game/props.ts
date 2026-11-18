@@ -87,9 +87,12 @@ export class SetDressing {
   private tableHeight = 0.72;
   private items: { spec: PropSpec; obj: Object3D }[] = [];
 
+  /** settles once every prop has loaded (or was skipped) */
+  readonly ready: Promise<unknown>;
+
   constructor(private readonly base: string) {
     this.group.name = 'set-dressing';
-    for (const spec of SET_DRESSING) void this.add(spec);
+    this.ready = Promise.allSettled(SET_DRESSING.map((spec) => this.add(spec)));
   }
 
   private async add(spec: PropSpec): Promise<void> {

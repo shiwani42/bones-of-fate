@@ -51,6 +51,7 @@ import { TableDressing } from './tablecloth.js';
 import { SetDressing } from './props.js';
 import { GhostDemo, type GhostDemoKind } from './ghost/ghost-hand.js';
 import { GoldStakes, type Owner } from './stakes.js';
+import { hideBoot, setBootProgress } from './boot.js';
 
 /**
  * The game director: one IWSDK system that owns the match.
@@ -280,6 +281,12 @@ export class ChausarSystem extends createSystem({
   private readonly headLocal = new Vector3();
   private readonly headWorld = new Vector3();
   private ghost!: GhostDemo;
+  /** every asset the entrance needs has loaded (or the wait timed out) */
+  private courtReady = false;
+  private courtDone = 0;
+  private courtTotal = 1;
+  private courtWait = 0;
+  private envResolve: (() => void) | null = null;
   private stakes!: GoldStakes;
   /** the total Shakuni will call out while his loaded dice are still in the air */
   private sCalled = 0;
@@ -295,6 +302,14 @@ export class ChausarSystem extends createSystem({
   /** cheats and the gong the player has used this match (unused ones get their hint again) */
   private readonly used = new Set<'swap' | 'flip' | 'gong'>();
 
+  private openCourt(why: string): void {
+    if (this.courtReady) return;
+    this.courtReady = true;
+    this.hint?.hide();
+    hideBoot();
+    if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} court ready (${why}) ${this.courtDone}/${this.courtTotal} in ${this.courtWait.toFixed(1)} s`);
+  }
+
   /** Sweep gold across the table, and say so in the dev log. */
   private moveGold(to: Owner, n: number, why: string): number {
     const moved = this.stakes.transfer(to, n);
@@ -309,7 +324,7 @@ export class ChausarSystem extends createSystem({
   }
 
   init(): void {
-    void loadFonts().then(() => this.refreshTitle());
+    const fontsP = loadFonts().then(() => this.refreshTitle());
     this.hands = new Hands();
     this.anchor = new Group();
     this.anchor.name = 'chausar-anchor';
@@ -326,7 +341,7 @@ export class ChausarSystem extends createSystem({
     this.shakuni.attachTo(this.anchor);
     // the realistic human: seated, clipped at the table top (needs local clipping)
     this.renderer.localClippingEnabled = true;
-    void this.shakuni.loadHuman(`${import.meta.env.BASE_URL}models/shakuni.glb`).then((ok) => {
+    const humanP = this.shakuni.loadHuman(`${import.meta.env.BASE_URL}models/shakuni.glb`).then((ok) => {
       if (import.meta.env.DEV) console.info(`[chausar] #${this.logTag()} human ${ok ? 'loaded' : 'FALLBACK'}`);
       if (ok) {
         this.shadows.watch(this.shakuni.group);
@@ -387,7 +402,7 @@ export class ChausarSystem extends createSystem({
     this.setDressing = new SetDressing(import.meta.env.BASE_URL);
     this.anchor.add(this.setDressing.group);
     // A real-world detail at Shakuni's side: brass goblets (Poly Haven, CC0)
-    void AssetManager.loadGLTF(`${import.meta.env.BASE_URL}models/props/goblets.glb`, 'goblets').then((g) => {
+    const gobletsP = AssetManager.loadGLTF(`${import.meta.env.BASE_URL}models/props/goblets.glb`, 'goblets').then((g) => {
       const o = g.scene;
       o.position.set(0.3, 0.0, -0.44);
       o.rotation.y = -0.6;
@@ -398,6 +413,18 @@ export class ChausarSystem extends createSystem({
       });
       this.anchor.add(o);
     }).catch(() => {});
+
+    // The court appears only when everything in it has arrived: Shakuni (with his turban),
+    // the hall, its reflections, the props and the fonts. No stand-ins, no pop-in.
+    if (import.meta.env.DEV) (window as unknown as { __chausar: unknown }).__chausar = this; // dev inspection only
+    const envP = new Promise<void>((res) => (this.envResolve = res));
+    const parts: Promise<unknown>[] = [humanP, fontsP, this.palace.ready, this.setDressing.ready, gobletsP, envP];
+    this.courtTotal = parts.length;
+    for (const p of parts) void p.finally(() => {
+      this.courtDone++;
+      setBootProgress(this.courtDone / this.courtTotal);
+    });
+    void Promise.allSettled(parts).then(() => this.openCourt('ready'));
 
     this.caption = new Label(0.44, 4.2, { size: 60 });
     this.caption.mesh.position.set(0, 0.25, -0.3);
@@ -616,9 +643,17 @@ export class ChausarSystem extends createSystem({
     // reflections come from the palace itself: keep the IBL (scene JSON: palace_env.jpg, a desaturated copy)
     // turned with the painted hall, whose centre sits behind Shakuni
     if (this.anchor) this.world.scene.environmentRotation.y = this.anchor.rotation.y + Math.PI / 2;
+    if (this.envResolve && this.world.scene.environment) {
+      this.envResolve(); // the palace reflections (IBL) are processed
+      this.envResolve = null;
+    }
     if (!this.anchorEntityReady) return;
     if (this.world.visibilityState.peek() === VisibilityState.VisibleBlurred) return;
     const dt = Math.min(delta, 1 / 20);
+    if (!this.courtReady) {
+      this.courtWait += dt;
+      if (this.courtWait > 30) this.openCourt('timeout'); // a slow asset must never hang the game
+    }
     this.time = time;
     this.phaseT += dt;
 
@@ -900,6 +935,16 @@ export class ChausarSystem extends createSystem({
   // ───────────────────────── intro ─────────────────────────
 
   private updateIntro(): void {
+    if (!this.courtReady) {
+      // hold the entrance at its first frame until the court has arrived
+      this.phaseT = 0;
+      this.board.root.visible = false;
+      this.title.opacity = 0;
+      this.ledgerLabel.opacity = 0;
+      this.shakuni.setFade(0);
+      if (this.immersive) this.hint.show(`Preparing the court…  ${Math.round((100 * this.courtDone) / this.courtTotal)}%`, this.tB.set(0, 0, 0), 0.12);
+      return;
+    }
     const t = this.phaseT;
     // board rises out of the table
     const e = Math.min(1, t / 1.4);

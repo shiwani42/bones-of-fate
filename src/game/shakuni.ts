@@ -283,6 +283,13 @@ export class Shakuni {
     this.hand.add(thumb);
     this.hand.name = 'shakuni-hand';
     this.setFade(0);
+    // the procedural bust is only a fallback: keep it hidden unless the real model fails
+    this.showBust(false);
+  }
+
+  private showBust(on: boolean): void {
+    for (const c of this.group.children) c.visible = on;
+    for (const c of this.hand.children) c.visible = on;
   }
 
   setFade(v: number): void {
@@ -412,26 +419,29 @@ export class Shakuni {
   /** Load the realistic model; the procedural bust stays as a fallback if this fails. */
   async loadHuman(url: string): Promise<boolean> {
     try {
+      // the body and the generated turban (tools/freegen → props/turban.glb) load together,
+      // and he joins the scene only once both are here: no bald frames, no pop-in
+      const turbanP = import('./props.js')
+        .then(({ loadNormalised }) => loadNormalised(url.replace('shakuni.glb', 'props/turban.glb'), 0.2, TURBAN_FRONT_YAW))
+        .catch(() => null);
       const gltf = await AssetManager.loadGLTF(url, 'shakuni-human');
       const scene = gltf.scene;
       const human = new ShakuniHuman(scene);
-      if (!human.ok) return false;
-      // hide the procedural bust (keep the group, the hand marker and labels)
-      for (const c of this.group.children) c.visible = false;
-      for (const c of this.hand.children) c.visible = false;
+      if (!human.ok) {
+        this.showBust(true);
+        return false;
+      }
+      const turban = await turbanP;
+      if (turban) human.wearTurban(turban);
       this.group.add(scene);
       this.group.add(this.seat.group);
       this.human = human;
       this.applyTableHeight();
       human.setFade(this.fade);
-      // a generated turban (tools/freegen → public/models/props/turban.glb), if present
-      void import('./props.js').then(async ({ loadNormalised }) => {
-        const t = await loadNormalised(url.replace('shakuni.glb', 'props/turban.glb'), 0.2, TURBAN_FRONT_YAW);
-        if (t && this.human) this.human.wearTurban(t);
-      });
       return true;
     } catch (e) {
       console.warn('[chausar] realistic Shakuni failed to load, using fallback', e);
+      this.showBust(true);
       return false;
     }
   }

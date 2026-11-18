@@ -208,6 +208,12 @@ export class ShakuniHuman {
       m.alphaTest = 0.5;
       m.side = DoubleSide;
       m.depthWrite = true;
+      // hair is matte: the bright palace reflections (IBL) turned strands grey-white at grazing angles
+      if ('envMapIntensity' in m) m.envMapIntensity = 0.2;
+      if ('roughness' in m) m.roughness = 0.88;
+      if ('metalness' in m) m.metalness = 0;
+      // the beard texture has light-grey strands painted in; keep the whole beard near-black
+      if (/beard/.test(name) && m.color) m.color.multiplyScalar(0.55);
       if (/brow|lash/.test(name)) {
         // MPFB's transparency nodes don't survive glTF export: rebuild the cut-out from the
         // texture itself (dark strands on a light ground) and tint the strands near-black.
@@ -232,10 +238,25 @@ export class ShakuniHuman {
       m.depthWrite = true;
     }
     if (/body/.test(name) && 'roughness' in m) m.roughness = 0.6;
+    // The palace IBL is bright (intensity 1.6, for the brass and gold). On skin and silk at
+    // grazing angles it read as white edges: pale ears, a white strip inside the collar.
+    // Only metal (zari) and the eyes keep full reflections.
+    if (!/hair|beard|brow|lash|zari|high-poly/.test(name) && 'envMapIntensity' in m) m.envMapIntensity = 0.5;
     if (/turban|robe/.test(name)) {
       m.roughness = /turban/.test(name) ? 0.66 : 0.58;
       m.metalness = 0;
       if (m.specularIntensity !== undefined) m.specularIntensity = 0.35;
+    }
+    if (/robe|zari/.test(name)) {
+      // the inside of a garment sits in its own shadow: lit like the outside, the inner
+      // collar showed as a grey wedge between his neck and the robe
+      m.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <dithering_fragment>',
+          'if ( ! gl_FrontFacing ) gl_FragColor.rgb *= 0.22;\n#include <dithering_fragment>',
+        );
+      };
+      m.customProgramCacheKey = () => 'garment-inner-shade';
     }
     if (/high-poly/.test(name)) {
       // MakeHuman eyes = eyeball + a clear cornea shell (alpha 0 in the texture).
